@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QA Split-View Gallery</title>
+    <title>QA Emerald Workspace</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -12,23 +12,12 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&display=swap');
         body { font-family: 'Plus Jakarta Sans', sans-serif; height: 100vh; overflow: hidden; }
-        
-        /* Animated Status Badge */
-        .status-badge-active {
-            animation: pulse-green 2s infinite;
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        }
-        @keyframes pulse-green {
-            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-            70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-        }
-
         .custom-scroll::-webkit-scrollbar { width: 4px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .active-tab { border-left: 6px solid #10b981; background: #f0fdf4; color: #065f46; }
     </style>
 </head>
-<body class="bg-white">
+<body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
 
     <script type="text/babel">
@@ -53,27 +42,24 @@
                 setSystems(data || []);
             }
 
-            // Triggered whenever you click a system on the left
             useEffect(() => {
                 if (activeSys) {
                     setNotes(activeSys.notes || "");
-                    fetchPhotos();
+                    fetchPhotos(activeSys.id);
                 }
             }, [activeSys]);
 
-            async function fetchPhotos() {
-                const { data, error } = await supabase.storage.from('photos').list('', {
+            async function fetchPhotos(id) {
+                const { data } = await supabase.storage.from('photos').list('', {
                     limit: 100,
-                    offset: 0,
-                    sortBy: { column: 'name', order: 'desc' },
+                    sortBy: { column: 'name', order: 'desc' }
                 });
                 
                 if (data) {
-                    // Filter files that belong to this specific System ID
-                    const systemFiles = data.filter(f => f.name.startsWith(`${activeSys.id}_`));
-                    const urls = systemFiles.map(file => {
+                    const filtered = data.filter(f => f.name.startsWith(`${id}_`));
+                    const urls = filtered.map(file => {
                         const { data: { publicUrl } } = supabase.storage.from('photos').getPublicUrl(file.name);
-                        return `${publicUrl}?t=${new Date().getTime()}`; // Cache buster
+                        return `${publicUrl}?t=${Date.now()}`;
                     });
                     setPhotos(urls);
                 }
@@ -88,114 +74,110 @@
                 if (files && files.length > 0) {
                     for (let i = 0; i < files.length; i++) {
                         const fileName = `${activeSys.id}_${Date.now()}_${i}.jpg`;
-                        const { error } = await supabase.storage.from('photos').upload(fileName, files[i]);
-                        if (error) console.error("Upload error:", error);
+                        await supabase.storage.from('photos').upload(fileName, files[i]);
                     }
                     hasAttach = true;
                 }
 
                 await supabase.from('systems').update({ notes, has_attachment: hasAttach }).eq('id', activeSys.id);
-                setLoading(false);
+                
                 await loadData();
-                await fetchPhotos();
-                fileInput.value = ""; // Reset input
+                await fetchPhotos(activeSys.id);
+                fileInput.value = "";
+                setLoading(false);
+                alert("Saved successfully!");
             }
 
-            const filtered = systems.filter(s => s.id.toLowerCase().includes(searchTerm.toLowerCase()));
+            async function deleteSystem() {
+                if (!confirm("Delete this system forever?")) return;
+                await supabase.from('systems').delete().eq('id', activeSys.id);
+                setActiveSys(null);
+                loadData();
+            }
 
             return (
                 <div className="flex h-screen w-full overflow-hidden">
-                    {/* LEFT SIDEBAR */}
-                    <aside className="w-80 border-r border-slate-100 flex flex-col bg-slate-50">
-                        <div className="p-6 bg-white border-b">
-                            <h1 className="text-xl font-black mb-4 tracking-tighter">QA <span className="text-emerald-500 underline">ENGINE</span></h1>
+                    {/* LEFT LIST PANEL */}
+                    <aside className="w-80 border-r bg-white flex flex-col shadow-sm">
+                        <div className="p-6 border-b space-y-4">
+                            <div className="flex justify-between items-center">
+                                <h1 className="text-xl font-black italic tracking-tighter">EMERALD</h1>
+                                <button onClick={() => {
+                                    const id = prompt("System ID:");
+                                    if(id) supabase.from('systems').insert([{id}]).then(loadData);
+                                }} className="bg-slate-900 text-white w-8 h-8 rounded-full font-bold">+</button>
+                            </div>
                             <input 
-                                className="w-full bg-slate-100 p-3 rounded-xl text-sm outline-none border-2 border-transparent focus:border-emerald-400 transition-all"
-                                placeholder="Find System ID..."
+                                className="w-full bg-slate-100 p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+                                placeholder="Filter units..."
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
-                        <div className="flex-1 overflow-y-auto custom-scroll p-4 space-y-2">
-                            {filtered.map(s => {
-                                const isDone = s.notes || s.has_attachment;
-                                return (
-                                    <div 
-                                        key={s.id}
-                                        onClick={() => setActiveSys(s)}
-                                        className={`p-4 rounded-2xl cursor-pointer transition-all border-2 ${activeSys?.id === s.id ? 'bg-white border-emerald-500 shadow-lg scale-[1.02]' : 'bg-transparent border-transparent hover:bg-slate-200/50'}`}
-                                    >
-                                        <div className="flex justify-between items-center">
-                                            <span className={`font-bold ${activeSys?.id === s.id ? 'text-emerald-600' : 'text-slate-600'}`}>#{s.id}</span>
-                                            {isDone && (
-                                                <div className="bg-emerald-500 text-white p-1 rounded-full">
-                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M5 13l4 4L19 7" /></svg>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                        <div className="flex-1 overflow-y-auto custom-scroll">
+                            {systems.filter(s => s.id.toLowerCase().includes(searchTerm.toLowerCase())).map(s => (
+                                <div 
+                                    key={s.id}
+                                    onClick={() => setActiveSys(s)}
+                                    className={`p-6 cursor-pointer border-b border-slate-50 transition-all flex justify-between items-center ${activeSys?.id === s.id ? 'active-tab' : 'hover:bg-slate-50'}`}
+                                >
+                                    <span className="font-bold">UNIT {s.id}</span>
+                                    {(s.notes || s.has_attachment) && <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>}
+                                </div>
+                            ))}
                         </div>
                     </aside>
 
-                    {/* MAIN WORKSPACE */}
-                    <main className="flex-1 flex flex-col bg-white overflow-y-auto custom-scroll">
+                    {/* RIGHT WORK AREA */}
+                    <main className="flex-1 bg-white flex flex-col overflow-y-auto custom-scroll">
                         {activeSys ? (
-                            <div className="p-8 md:p-16 max-w-5xl w-full mx-auto space-y-12">
-                                <div className="flex justify-between items-start">
+                            <div className="p-12 max-w-5xl w-full mx-auto space-y-12">
+                                <header className="flex justify-between items-end">
                                     <div>
-                                        <div className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-4 ${activeSys.notes || activeSys.has_attachment ? 'status-badge-active text-white' : 'bg-slate-200 text-slate-500'}`}>
-                                            {activeSys.notes || activeSys.has_attachment ? 'System Cleared' : 'Awaiting Test'}
-                                        </div>
-                                        <h2 className="text-7xl font-black tracking-tighter text-slate-900">SYS_{activeSys.id}</h2>
+                                        <h2 className="text-7xl font-black tracking-tighter leading-none">#{activeSys.id}</h2>
+                                        <p className="text-slate-400 font-bold uppercase text-[10px] mt-2 tracking-widest">Active Inspection Workspace</p>
                                     </div>
-                                    <button 
-                                        onClick={handleSave}
-                                        disabled={loading}
-                                        className="bg-slate-900 text-white px-12 py-5 rounded-2xl font-black text-sm hover:bg-emerald-600 transition-all shadow-xl disabled:opacity-50 active:scale-95"
-                                    >
-                                        {loading ? "SYNCING..." : "SAVE & PUSH"}
-                                    </button>
-                                </div>
+                                    <div className="flex gap-4">
+                                        <button onClick={deleteSystem} className="text-rose-500 font-bold text-xs uppercase tracking-widest px-4 hover:underline">Delete</button>
+                                        <button onClick={handleSave} disabled={loading} className="bg-emerald-500 text-white px-12 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-100 hover:scale-105 transition-all active:scale-95">
+                                            {loading ? "Saving..." : "Save Data"}
+                                        </button>
+                                    </div>
+                                </header>
 
-                                <div className="space-y-4">
-                                    <label className="text-xs font-black text-slate-300 uppercase tracking-[0.2em]">Diagnostic Findings</label>
+                                <section className="space-y-4">
+                                    <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest italic">// Notes</label>
                                     <textarea 
-                                        className="w-full h-48 bg-slate-50 border-none rounded-[2rem] p-8 text-xl outline-none focus:ring-4 focus:ring-emerald-50 text-slate-700"
+                                        className="w-full h-64 bg-slate-50 rounded-[2.5rem] p-10 text-2xl font-bold text-slate-700 outline-none focus:ring-4 focus:ring-emerald-50"
                                         value={notes}
                                         onChange={(e) => setNotes(e.target.value)}
-                                        placeholder="Type test results here..."
+                                        placeholder="Start typing findings..."
                                     />
-                                </div>
+                                </section>
 
-                                <div className="space-y-6">
-                                    <div className="flex justify-between items-center">
-                                        <label className="text-xs font-black text-slate-300 uppercase tracking-[0.2em]">Evidence Gallery ({photos.length})</label>
-                                        <div className="relative">
-                                            <button className="bg-emerald-50 text-emerald-600 px-6 py-2 rounded-full font-bold text-xs hover:bg-emerald-100 transition-colors">+ Add Photos</button>
-                                            <input type="file" id="file-upload" multiple className="absolute inset-0 opacity-0 cursor-pointer" />
+                                <section className="space-y-6">
+                                    <div className="flex justify-between items-center border-b pb-4">
+                                        <label className="text-[10px] font-black text-slate-300 uppercase tracking-widest italic">// Photos Attached ({photos.length})</label>
+                                        <div className="relative overflow-hidden inline-block cursor-pointer">
+                                            <span className="text-emerald-500 font-bold text-sm">+ Add New Images</span>
+                                            <input type="file" id="file-upload" multiple className="absolute top-0 left-0 opacity-0 cursor-pointer scale-150" />
                                         </div>
                                     </div>
                                     
-                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                                         {photos.map((url, i) => (
-                                            <div key={i} className="group relative aspect-square rounded-[1.5rem] overflow-hidden bg-slate-100 border-2 border-slate-50">
-                                                <img src={url} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
-                                                <a href={url} target="_blank" className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] font-bold uppercase tracking-widest">View Full</a>
-                                            </div>
+                                            <a key={i} href={url} target="_blank" className="aspect-square rounded-[2rem] overflow-hidden border-4 border-slate-50 shadow-sm hover:shadow-xl transition-all">
+                                                <img src={url} className="w-full h-full object-cover" />
+                                            </a>
                                         ))}
-                                        {photos.length === 0 && (
-                                            <div className="col-span-full py-12 border-2 border-dashed border-slate-100 rounded-[2rem] flex flex-col items-center justify-center text-slate-300">
-                                                <svg className="w-12 h-12 mb-2 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                                                <p className="text-[10px] font-black uppercase">No photos attached</p>
-                                            </div>
-                                        )}
+                                        <div className="aspect-square bg-slate-50 rounded-[2rem] border-4 border-dashed border-slate-100 flex items-center justify-center text-slate-300 text-[10px] font-bold text-center p-4">
+                                            Select files above to see them here after saving
+                                        </div>
                                     </div>
-                                </div>
+                                </section>
                             </div>
                         ) : (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-200">
-                                <h3 className="text-2xl font-black uppercase tracking-tighter">Select a system to inspect</h3>
+                            <div className="h-full flex items-center justify-center text-slate-200 font-black text-2xl tracking-tighter opacity-50 uppercase">
+                                Select unit to begin
                             </div>
                         )}
                     </main>
