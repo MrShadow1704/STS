@@ -3,191 +3,169 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QA Cyber-Monitor PRO</title>
+    <title>QA Management System</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <style>
-        body { background-color: #020617; color: #e2e8f0; font-family: ui-monospace, monospace; }
-        .glass { background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.05); }
-        .active-glow { box-shadow: 0 0 25px rgba(34, 211, 238, 0.2); border: 1px solid #22d3ee !important; }
-        .neon-bar { width: 4px; height: 40px; border-radius: 99px; }
-        .status-done { background: #22d3ee; box-shadow: 0 0 10px #22d3ee; }
-        .status-pending { background: #1e293b; }
-        .custom-scroll::-webkit-scrollbar { width: 3px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #334155; }
-    </style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden">
+<body class="bg-gray-50 text-gray-900 min-h-screen font-sans">
 
-    <header class="glass border-b border-slate-800 px-8 py-4 flex justify-between items-center z-10">
-        <div class="flex items-center gap-4">
-            <div class="h-2 w-2 bg-cyan-400 rounded-full animate-pulse shadow-[0_0_10px_#22d3ee]"></div>
-            <h1 class="text-lg font-black tracking-[.2em] uppercase text-white">System <span class="text-cyan-400">Control</span></h1>
+    <nav class="bg-white border-b sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                <h1 class="text-xl font-bold tracking-tight">QA Dashboard</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <input type="text" id="search" placeholder="Search ID..." class="px-4 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                <button onclick="addSystem()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition">+ Add System</button>
+            </div>
         </div>
-        <div class="flex gap-2">
-            <button onclick="addSystem()" class="bg-cyan-500/10 border border-cyan-500/50 text-cyan-400 px-3 py-1 rounded text-[10px] font-bold hover:bg-cyan-500 hover:text-black transition-all">+ NEW UNIT</button>
-            <div id="connection-status" class="text-[10px] tracking-widest text-slate-500 uppercase font-bold py-1 px-3 border border-slate-800 rounded bg-black/40">LINK: WAITING</div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-8">
+        <div id="system-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            </div>
+
+        <div class="mt-12 bg-gray-900 rounded-xl p-6 text-xs font-mono text-gray-400 shadow-inner">
+            <p class="text-gray-500 font-bold mb-2 uppercase border-b border-gray-800 pb-2">Console Diagnostics</p>
+            <div id="debug-log" class="h-32 overflow-y-auto space-y-1">
+                <p>> Dashboard Initialized. Awaiting Data...</p>
+            </div>
         </div>
-    </header>
-
-    <main class="flex flex-1 overflow-hidden">
-        <aside class="w-80 border-r border-slate-800 flex flex-col bg-black/40">
-            <div class="p-6">
-                <input type="text" id="search" placeholder="FILTER_ID..." 
-                    class="w-full bg-slate-900 border border-slate-800 rounded px-4 py-2 text-cyan-400 outline-none focus:border-cyan-500 text-xs font-bold">
-            </div>
-            <div id="system-list" class="flex-1 overflow-y-auto custom-scroll px-4 pb-4 space-y-2"></div>
-        </aside>
-
-        <section class="flex-1 overflow-y-auto p-12 bg-[#020617] flex flex-col items-center">
-            
-            <div id="editor-ui" class="w-full max-w-3xl hidden">
-                <div class="glass rounded-3xl p-10 border border-slate-700 shadow-2xl relative overflow-hidden">
-                    <div class="flex justify-between items-start mb-8">
-                        <div>
-                            <p class="text-cyan-500 text-[10px] font-black tracking-widest mb-2 italic">// Diagnostic_Module</p>
-                            <h2 class="text-5xl font-black text-white">SYS_<span id="display-id">--</span></h2>
-                        </div>
-                        <button onclick="deleteSystem()" class="text-red-500/50 hover:text-red-500 text-[10px] font-bold border border-red-500/20 px-3 py-1 rounded uppercase tracking-widest">Delete Unit</button>
-                    </div>
-
-                    <div class="space-y-6">
-                        <textarea id="note-input" rows="5" 
-                            class="w-full bg-black/40 border border-slate-800 rounded-2xl p-6 text-slate-200 outline-none focus:border-cyan-500 text-lg" 
-                            placeholder="Input diagnostic data..."></textarea>
-
-                        <div id="file-link-box" class="hidden p-4 rounded-xl border border-cyan-500/30 bg-cyan-500/5 flex items-center justify-between">
-                            <span class="text-cyan-400 font-bold text-[10px]">FILE_ATTACHMENT_VERIFIED</span>
-                            <a id="file-download" href="#" target="_blank" class="bg-cyan-500 text-black px-4 py-1 rounded font-black text-[10px] uppercase">Retrieve</a>
-                        </div>
-
-                        <div class="relative border border-slate-800 hover:border-cyan-500 bg-black/20 rounded-2xl p-6 text-center transition-all cursor-pointer group">
-                            <span class="text-[10px] text-slate-500 group-hover:text-cyan-400 tracking-widest font-bold uppercase">+ Push Telemetry File</span>
-                            <input type="file" id="upload-field" class="absolute inset-0 opacity-0 cursor-pointer">
-                        </div>
-
-                        <button id="sync-btn" class="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-black py-5 rounded-xl text-xs uppercase tracking-[0.4em] shadow-[0_10px_30px_rgba(34,211,238,0.2)]">
-                            Finalize_And_Sync
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="w-full max-w-3xl mt-8">
-                <div class="bg-black border border-slate-800 rounded-lg p-4 font-mono text-[10px]">
-                    <p class="text-slate-500 mb-2 font-bold uppercase tracking-widest">Live_Debug_Console</p>
-                    <div id="debug-log" class="h-24 overflow-y-auto space-y-1 text-slate-400">
-                        <p>> System Ready. Awaiting Handshake.</p>
-                    </div>
-                </div>
-            </div>
-        </section>
     </main>
 
+    <div id="modal" class="fixed inset-0 bg-black/50 hidden backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden">
+            <div class="px-8 py-6 border-b flex justify-between items-center bg-gray-50">
+                <h2 class="text-2xl font-bold">System #<span id="display-id">--</span></h2>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            
+            <div class="p-8 space-y-6">
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Test Results</label>
+                    <textarea id="note-input" rows="5" class="w-full border border-gray-200 rounded-xl p-4 text-gray-700 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Enter findings..."></textarea>
+                </div>
+
+                <div id="file-box" class="hidden p-4 bg-blue-50 rounded-xl border border-blue-100 flex justify-between items-center">
+                    <span class="text-blue-700 font-bold text-sm underline">Photo Attached</span>
+                    <a id="file-download" href="#" target="_blank" class="bg-blue-600 text-white px-4 py-1 rounded text-xs font-bold">View</a>
+                </div>
+
+                <div class="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
+                    <p class="text-gray-400 text-sm mb-2">Upload New Attachment</p>
+                    <input type="file" id="upload-field" class="text-xs">
+                </div>
+
+                <div class="flex gap-3">
+                    <button id="sync-btn" class="flex-1 bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 transition">Save & Update</button>
+                    <button onclick="deleteSystem()" class="bg-red-50 text-red-600 px-6 rounded-xl font-bold hover:bg-red-100 transition">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
+        // 1. YOUR CONFIG
         const DB_URL = 'https://bbgcsddwzcrxwzczrojf.supabase.co'; 
         const DB_KEY = 'sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f';
         const client = window.supabase.createClient(DB_URL, DB_KEY);
 
         let activeId = null;
 
-        function log(msg, type = 'info') {
+        function log(msg, isErr = false) {
             const div = document.getElementById('debug-log');
             const p = document.createElement('p');
-            const color = type === 'error' ? 'text-red-500' : 'text-cyan-600';
-            p.innerHTML = `<span class="${color}">[${new Date().toLocaleTimeString()}]</span> ${msg}`;
+            p.className = isErr ? 'text-red-400' : 'text-green-400';
+            p.innerText = `> [${new Date().toLocaleTimeString()}] ${msg}`;
             div.prepend(p);
         }
 
-        async function refresh() {
+        async function loadData() {
             try {
                 const { data, error } = await client.from('systems').select('*').order('id');
                 if (error) throw error;
 
-                document.getElementById('connection-status').innerText = "LINK: ESTABLISHED";
-                document.getElementById('connection-status').classList.replace('text-slate-500', 'text-cyan-400');
+                const search = document.getElementById('search').value.toLowerCase();
+                const grid = document.getElementById('system-grid');
+                grid.innerHTML = '';
 
-                const term = document.getElementById('search').value.toLowerCase();
-                const list = document.getElementById('system-list');
-                list.innerHTML = '';
-
-                data.filter(s => s.id.includes(term)).forEach(s => {
-                    const done = s.notes || s.has_attachment;
-                    const active = activeId === s.id;
-                    const div = document.createElement('div');
-                    div.className = `p-4 rounded-xl cursor-pointer flex items-center justify-between border transition-all ${active ? 'active-glow bg-cyan-500/10 border-cyan-500' : 'border-slate-800 bg-slate-900/30 hover:bg-slate-800/50'}`;
-                    div.innerHTML = `<div><p class="text-[8px] text-slate-600 font-bold uppercase">Unit_ID</p><p class="text-lg font-black ${active ? 'text-cyan-400' : 'text-slate-300'}">#${s.id}</p></div><div class="neon-bar ${done ? 'status-done' : 'status-pending'}"></div>`;
-                    div.onclick = () => { activeId = s.id; openSys(s); };
-                    list.appendChild(div);
+                data.filter(s => s.id.includes(search)).forEach(s => {
+                    const isDone = s.notes || s.has_attachment;
+                    const card = document.createElement('div');
+                    card.className = "bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition cursor-pointer relative group";
+                    card.innerHTML = `
+                        <div class="flex justify-between items-start mb-4">
+                            <span class="text-3xl font-black text-gray-800">#${s.id}</span>
+                            <span class="px-2 py-1 rounded text-[10px] font-bold uppercase ${isDone ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}">${isDone ? 'Cleared' : 'Pending'}</span>
+                        </div>
+                        <p class="text-gray-500 text-sm line-clamp-2 mb-4">${s.notes || 'No results recorded yet...'}</p>
+                        ${s.has_attachment ? '<div class="text-blue-500 text-xs font-bold">📎 Photo Attached</div>' : ''}
+                    `;
+                    card.onclick = () => openModal(s);
+                    grid.appendChild(card);
                 });
             } catch (err) {
-                log("DB_ERROR: " + err.message, 'error');
-                document.getElementById('connection-status').innerText = "LINK: FAILED";
+                log("DB Error: " + err.message, true);
             }
         }
 
-        async function addSystem() {
-            const id = prompt("Enter New System Number (e.g. 105):");
-            if (!id) return;
-            log(`Attempting to add Unit #${id}...`);
-            const { error } = await client.from('systems').insert([{ id: id, notes: '', has_attachment: false }]);
-            if (error) log(error.message, 'error');
-            else { log(`Unit #${id} Initialized.`); refresh(); }
-        }
-
-        async function deleteSystem() {
-            if (!confirm(`Permanently delete System #${activeId}?`)) return;
-            log(`Purging Unit #${activeId}...`);
-            const { error } = await client.from('systems').delete().eq('id', activeId);
-            if (error) log(error.message, 'error');
-            else { 
-                log(`Unit #${activeId} Purged.`);
-                activeId = null;
-                document.getElementById('editor-ui').classList.add('hidden');
-                refresh(); 
-            }
-        }
-
-        function openSys(s) {
-            document.getElementById('editor-ui').classList.remove('hidden');
+        function openModal(s) {
+            activeId = s.id;
+            document.getElementById('modal').classList.remove('hidden');
             document.getElementById('display-id').innerText = s.id;
             document.getElementById('note-input').value = s.notes || '';
-            const isDone = s.notes || s.has_attachment;
-            document.getElementById('status-badge').innerText = isDone ? 'VERIFIED' : 'PENDING';
-            document.getElementById('status-badge').className = `px-4 py-1 rounded border text-[10px] font-black tracking-widest ${isDone ? 'border-cyan-500 text-cyan-400 shadow-[0_0_10px_#22d3ee]' : 'border-slate-700 text-slate-600'}`;
             
-            const box = document.getElementById('file-link-box');
+            const box = document.getElementById('file-box');
             if (s.has_attachment) {
                 box.classList.remove('hidden');
                 document.getElementById('file-download').href = `${DB_URL}/storage/v1/object/public/photos/${s.id}.jpg`;
             } else { box.classList.add('hidden'); }
-            refresh();
+        }
+
+        function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+
+        async function addSystem() {
+            const id = prompt("System ID:");
+            if (!id) return;
+            const { error } = await client.from('systems').insert([{ id: id }]);
+            if (error) log(error.message, true);
+            else { log(`System #${id} added.`); loadData(); }
+        }
+
+        async function deleteSystem() {
+            if (!confirm("Delete this system?")) return;
+            const { error } = await client.from('systems').delete().eq('id', activeId);
+            if (error) log(error.message, true);
+            else { log(`System #${activeId} removed.`); closeModal(); loadData(); }
         }
 
         document.getElementById('sync-btn').onclick = async () => {
             const btn = document.getElementById('sync-btn');
-            btn.innerText = "UPLOADING..."; btn.disabled = true;
+            btn.innerText = "Saving..."; btn.disabled = true;
+
             const file = document.getElementById('upload-field').files[0];
-            let attachState = (await client.from('systems').select('has_attachment').eq('id', activeId).single()).data.has_attachment || false;
+            let hasAttach = (await client.from('systems').select('has_attachment').eq('id', activeId).single()).data.has_attachment;
 
             if (file) {
-                log(`Uploading telemetry file for #${activeId}...`);
                 const { error } = await client.storage.from('photos').upload(`${activeId}.jpg`, file, { upsert: true });
-                if (error) log(error.message, 'error');
-                else attachState = true;
+                if (error) log("Storage Error: " + error.message, true);
+                else hasAttach = true;
             }
 
-            const { error } = await client.from('systems').update({ notes: document.getElementById('note-input').value, has_attachment: attachState }).eq('id', activeId);
-            if (error) log(error.message, 'error');
-            else { log(`Unit #${activeId} Sync Complete.`); }
+            const { error } = await client.from('systems').update({ 
+                notes: document.getElementById('note-input').value, 
+                has_attachment: hasAttach 
+            }).eq('id', activeId);
+
+            if (error) log("Update Error: " + error.message, true);
+            else { log(`System #${activeId} updated.`); closeModal(); loadData(); }
             
-            btn.innerText = "Finalize_And_Sync"; btn.disabled = false;
-            refresh();
+            btn.innerText = "Save & Update"; btn.disabled = false;
         };
 
-        document.getElementById('search').oninput = refresh;
-        refresh();
-        setInterval(refresh, 20000);
+        document.getElementById('search').oninput = loadData;
+        loadData();
     </script>
 </body>
 </html>
