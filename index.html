@@ -4,43 +4,49 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QA Navigator Pro</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; }
-        .modal-animate { animation: slideUp 0.3s ease-out; }
-        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    </style>
 </head>
-<body>
-    <div id="root"></div>
+<body class="bg-slate-50">
+    <div id="root">
+        <div style="padding: 50px; text-align: center; font-family: sans-serif;">
+            <h2>Loading System Navigator...</h2>
+            <p>If this screen stays blank for more than 5 seconds, check the Console (F12) for errors.</p>
+        </div>
+    </div>
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // --- DATABASE CONFIG ---
-        const SB_URL = 'https://bbgcsddwzcrxwzczrojf.supabase.co';
+        // --- REPLACE THESE ---
+        const SB_URL = 'https://bbgcsddwzcrxwzczrojf.supabase.co'; 
         const SB_KEY = 'sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f';
+        
+        // Initialize Supabase
         const supabase = window.supabase.createClient(SB_URL, SB_KEY);
 
         function App() {
             const [systems, setSystems] = useState([]);
             const [activeSys, setActiveSys] = useState(null);
             const [notes, setNotes] = useState("");
-            const [filter, setFilter] = useState('all'); // all | pending | cleared
+            const [filter, setFilter] = useState('all');
             const [searchTerm, setSearchTerm] = useState('');
             const [loading, setLoading] = useState(false);
 
             useEffect(() => { loadData(); }, []);
 
-            const loadData = async () => {
-                const { data } = await supabase.from('systems').select('*').order('id');
-                setSystems(data || []);
-            };
+            async function loadData() {
+                try {
+                    const { data, error } = await supabase.from('systems').select('*').order('id');
+                    if (error) throw error;
+                    setSystems(data || []);
+                } catch (e) {
+                    console.error("Load Error:", e.message);
+                }
+            }
 
             const filteredData = useMemo(() => {
                 return systems.filter(item => {
@@ -52,7 +58,7 @@
                 });
             }, [systems, filter, searchTerm]);
 
-            const handleSave = async () => {
+            async function handleSave() {
                 setLoading(true);
                 const file = document.getElementById('file-upload')?.files[0];
                 let hasAttach = activeSys.has_attachment;
@@ -66,47 +72,64 @@
                 setLoading(false);
                 setActiveSys(null);
                 loadData();
-            };
+            }
 
             return (
-                <div className="min-h-screen pb-20">
-                    {/* STICKY HEADER */}
-                    <nav className="bg-white/80 backdrop-blur-md border-b sticky top-0 z-20 px-6 py-4">
-                        <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-4 justify-between items-center">
-                            <div className="flex items-center gap-2">
-                                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
-                                    <span className="text-white font-extrabold text-xl">Q</span>
-                                </div>
-                                <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">NAVIGATOR</h1>
-                            </div>
-
-                            <div className="flex items-center gap-3 w-full md:w-auto">
+                <div className="min-h-screen pb-10">
+                    <nav className="bg-white border-b px-6 py-4 sticky top-0 z-20">
+                        <div className="max-w-6xl mx-auto flex justify-between items-center">
+                            <h1 className="text-xl font-bold text-indigo-600">QA NAVIGATOR</h1>
+                            <div className="flex gap-2">
                                 <input 
-                                    type="text" 
-                                    placeholder="Search System ID..." 
-                                    className="flex-1 md:w-64 px-4 py-2 bg-slate-100 rounded-xl outline-none border-2 border-transparent focus:border-indigo-500 transition-all text-sm"
+                                    className="bg-slate-100 px-4 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                                    placeholder="Search ID..."
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
-                                <button 
-                                    onClick={() => {
-                                        const id = prompt("New System ID:");
-                                        if(id) supabase.from('systems').insert([{id}]).then(loadData);
-                                    }}
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap"
-                                >
-                                    + Add Unit
-                                </button>
+                                <button onClick={() => {
+                                    const id = prompt("ID:");
+                                    if(id) supabase.from('systems').insert([{id}]).then(loadData);
+                                }} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">+</button>
                             </div>
                         </div>
                     </nav>
 
-                    {/* FILTER TABS */}
-                    <div className="max-w-6xl mx-auto px-6 mt-8">
-                        <div className="flex p-1 bg-slate-200 rounded-2xl w-fit">
+                    <div className="max-w-6xl mx-auto px-6 mt-6">
+                        <div className="flex bg-slate-200 p-1 rounded-xl w-fit mb-8">
                             {['all', 'pending', 'cleared'].map(t => (
-                                <button 
-                                    key={t}
-                                    onClick={() => setFilter(t)}
-                                    className={`px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${filter === t ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                                >
-                                    {t
+                                <button key={t} onClick={() => setFilter(t)} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase ${filter === t ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>{t}</button>
+                            ))}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                            {filteredData.map(s => (
+                                <div key={s.id} onClick={() => {setActiveSys(s); setNotes(s.notes || "");}} className="bg-white p-6 rounded-3xl border border-slate-200 hover:shadow-xl transition-all cursor-pointer">
+                                    <div className="flex justify-between mb-4">
+                                        <span className="font-bold text-slate-400">#{s.id}</span>
+                                        <div className={`h-2 w-2 rounded-full ${s.notes || s.has_attachment ? 'bg-green-500' : 'bg-slate-200'}`} />
+                                    </div>
+                                    <p className="text-sm text-slate-600 line-clamp-2">{s.notes || "No data..."}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {activeSys && (
+                        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                            <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-10">
+                                <h2 className="text-2xl font-bold mb-6 text-slate-800">System {activeSys.id}</h2>
+                                <textarea className="w-full h-40 bg-slate-50 border rounded-2xl p-4 mb-4 outline-none focus:ring-2 focus:ring-indigo-500" value={notes} onChange={(e) => setNotes(e.target.value)} />
+                                <input type="file" id="file-upload" className="text-xs mb-6 block" />
+                                <button disabled={loading} onClick={handleSave} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-indigo-600 transition-all">{loading ? "Saving..." : "Save Data"}</button>
+                                <button onClick={() => setActiveSys(null)} className="w-full text-slate-400 mt-2 text-sm">Cancel</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
