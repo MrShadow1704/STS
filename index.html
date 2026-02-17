@@ -3,161 +3,187 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QA Results Dashboard</title>
+    <title>QA Systems Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <style>
-        .custom-scroll::-webkit-scrollbar { width: 6px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .system-card:hover { transform: translateY(-1px); }
+        .custom-scroll::-webkit-scrollbar { width: 5px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .system-item:hover { transform: translateX(4px); }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 h-screen flex flex-col overflow-hidden">
 
     <header class="bg-white border-b px-8 py-4 flex justify-between items-center shadow-sm z-10">
         <div class="flex items-center gap-3">
-            <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-            <h1 class="text-xl font-bold tracking-tight text-slate-800">QA Systems Monitor</h1>
+            <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]"></div>
+            <h1 class="text-xl font-bold tracking-tight text-slate-800 uppercase italic">Live QA Monitor</h1>
         </div>
-        <div class="text-sm text-slate-500 font-medium" id="sync-status">Syncing live...</div>
+        <div id="status-chip" class="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-500 uppercase">Connecting...</div>
     </header>
 
     <main class="flex flex-1 overflow-hidden">
-        <aside class="w-80 bg-white border-r flex flex-col">
-            <div class="p-4 border-b">
-                <input type="text" id="search" placeholder="Search systems..." 
-                    class="w-full px-4 py-2 bg-slate-100 border-none rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+        <aside class="w-80 bg-white border-r flex flex-col shadow-inner">
+            <div class="p-4">
+                <input type="text" id="search" placeholder="Search system #..." 
+                    class="w-full px-4 py-3 bg-slate-100 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-400">
             </div>
-            <div id="list" class="flex-1 overflow-y-auto custom-scroll p-2 space-y-1">
+            <div id="list" class="flex-1 overflow-y-auto custom-scroll px-3 pb-4 space-y-1">
                 </div>
         </aside>
 
-        <section class="flex-1 overflow-y-auto bg-slate-50 p-8 flex justify-center">
+        <section class="flex-1 overflow-y-auto p-8 lg:p-12 flex justify-center bg-[#f8fafc]">
             <div id="editor" class="w-full max-w-3xl hidden">
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div class="px-8 py-6 border-b flex justify-between items-center bg-white">
-                        <h2 class="text-2xl font-extrabold text-slate-800">System #<span id="sys-id">--</span></h2>
-                        <span id="badge" class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider"></span>
+                <div class="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+                    <div class="px-8 py-6 border-b border-slate-50 flex justify-between items-center bg-white">
+                        <h2 class="text-3xl font-black text-slate-800">SYSTEM <span id="sys-id" class="text-blue-600">--</span></h2>
+                        <span id="badge" class="px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest"></span>
                     </div>
 
                     <div class="p-8">
-                        <label class="block text-sm font-bold text-slate-500 uppercase mb-2">Test Results & Notes</label>
-                        <textarea id="notes" rows="8" 
-                            class="w-full p-4 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-blue-50/50 focus:border-blue-500 outline-none transition-all text-slate-700 leading-relaxed" 
-                            placeholder="Describe the test results here..."></textarea>
+                        <label class="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3">Test Observations</label>
+                        <textarea id="notes" rows="6" 
+                            class="w-full p-5 border border-slate-100 rounded-2xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-slate-700 text-lg leading-relaxed mb-8" 
+                            placeholder="Type results here..."></textarea>
 
-                        <div id="attachment-section" class="mt-8">
-                            <label class="block text-sm font-bold text-slate-500 uppercase mb-3">Evidence / Photos</label>
+                        <div id="attachment-area">
+                            <label class="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3">Supporting Evidence</label>
                             
-                            <div id="dl-box" class="hidden mb-4 p-4 bg-blue-50 rounded-xl border border-blue-100 flex items-center justify-between">
+                            <div id="dl-box" class="hidden mb-6 p-5 bg-blue-600 rounded-2xl flex items-center justify-between text-white shadow-lg shadow-blue-200">
                                 <div class="flex items-center gap-3">
-                                    <span class="text-xl">📄</span>
-                                    <span class="font-bold text-blue-700">Photo Attached</span>
+                                    <span class="text-2xl">📸</span>
+                                    <div class="flex flex-col">
+                                        <span class="font-bold text-sm">Attachment Found</span>
+                                        <span class="text-[10px] opacity-70">IMAGE_FILE_#<span id="sys-id-file"></span></span>
+                                    </div>
                                 </div>
-                                <a id="dl-link" href="#" target="_blank" class="text-blue-600 hover:text-blue-800 font-bold text-sm underline uppercase tracking-tight">View File</a>
+                                <a id="dl-link" href="#" target="_blank" class="bg-white text-blue-600 px-4 py-2 rounded-xl font-black text-xs uppercase hover:bg-slate-100 transition-colors">Open File</a>
                             </div>
 
-                            <div class="relative group border-2 border-dashed border-slate-200 rounded-xl p-8 text-center hover:border-blue-400 hover:bg-blue-50/50 transition-all cursor-pointer">
-                                <p class="text-slate-400 font-medium group-hover:text-blue-500">Click to upload new evidence</p>
+                            <div class="relative group border-2 border-dashed border-slate-200 rounded-2xl p-10 text-center hover:border-blue-400 hover:bg-blue-50/50 transition-all cursor-pointer">
+                                <p class="text-slate-400 font-bold group-hover:text-blue-500">Drop file here or click to upload</p>
                                 <input type="file" id="file-input" class="absolute inset-0 opacity-0 cursor-pointer">
                             </div>
                         </div>
 
                         <button id="save-btn" 
-                            class="mt-10 w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-600 shadow-lg shadow-slate-200 transition-all active:scale-[0.98]">
-                            Save System Update
+                            class="mt-10 w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-lg hover:bg-blue-600 hover:shadow-2xl hover:shadow-blue-200 transition-all active:scale-[0.97] uppercase tracking-widest">
+                            Save & Push Update
                         </button>
                     </div>
                 </div>
             </div>
 
             <div id="empty" class="flex flex-col items-center justify-center text-slate-300">
-                <svg class="w-20 h-20 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                <p class="text-xl font-medium">Select a system to manage results</p>
+                <div class="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-6">
+                    <svg class="w-10 h-10 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+                </div>
+                <p class="text-lg font-bold uppercase tracking-widest opacity-40 italic">Select System ID</p>
             </div>
         </section>
     </main>
 
     <script>
-        // CONFIG
-        const SB_URL = 'https://bbgcsddwzcrxwzczrojf.supabase.co';
-        const SB_KEY = 'sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f';
-        const supabase = window.supabase.createClient(SB_URL, SB_KEY);
+        // --- IMPORTANT: Update these keys carefully ---
+        const DB_URL = 'https://bbgcsddwzcrxwzczrojf.supabase.co';
+        const DB_KEY = 'sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f';
+        
+        // Using a unique variable name to avoid 'already declared' error
+        const appClient = window.supabase.createClient(DB_URL, DB_KEY);
 
-        let activeId = null;
+        let selectedId = null;
 
-        async function refresh() {
-            const { data } = await supabase.from('systems').select('*').order('id');
-            const search = document.getElementById('search').value;
-            const list = document.getElementById('list');
-            list.innerHTML = '';
+        async function updateDashboard() {
+            try {
+                const { data, error } = await appClient.from('systems').select('*').order('id');
+                if (error) throw error;
 
-            data.filter(s => s.id.includes(search)).forEach(s => {
-                const isDone = s.notes || s.has_attachment;
-                const active = activeId === s.id;
-                const div = document.createElement('div');
-                div.className = `system-card p-4 rounded-xl cursor-pointer flex justify-between items-center transition-all ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'hover:bg-slate-100'}`;
-                div.innerHTML = `
-                    <div class="flex flex-col">
-                        <span class="font-bold text-sm uppercase opacity-60">ID</span>
-                        <span class="font-extrabold text-lg">#${s.id}</span>
-                    </div>
-                    <div class="h-3 w-3 rounded-full ${isDone ? (active ? 'bg-white shadow-[0_0_10px_white]' : 'bg-green-500') : (active ? 'bg-blue-300' : 'bg-slate-200')}"></div>
-                `;
-                div.onclick = () => { activeId = s.id; openSystem(s); };
-                list.appendChild(div);
-            });
+                document.getElementById('status-chip').innerText = "✅ Systems Live";
+                document.getElementById('status-chip').className = "text-[10px] font-black px-3 py-1 rounded-full bg-green-100 text-green-600 uppercase";
+
+                const search = document.getElementById('search').value;
+                const list = document.getElementById('list');
+                list.innerHTML = '';
+
+                data.filter(s => s.id.includes(search)).forEach(s => {
+                    const isDone = s.notes || s.has_attachment;
+                    const isActive = selectedId === s.id;
+                    const div = document.createElement('div');
+                    
+                    div.className = `system-item p-4 rounded-2xl cursor-pointer flex justify-between items-center transition-all duration-200 ${isActive ? 'bg-blue-600 text-white shadow-xl shadow-blue-200 scale-[1.02]' : 'hover:bg-slate-100'}`;
+                    
+                    div.innerHTML = `
+                        <div class="flex flex-col">
+                            <span class="font-black text-xs uppercase ${isActive ? 'opacity-50' : 'text-slate-300'}">ID</span>
+                            <span class="font-black text-xl">#${s.id}</span>
+                        </div>
+                        <div class="h-4 w-4 rounded-full border-4 ${isActive ? 'border-blue-500 bg-white' : (isDone ? 'bg-green-500 border-white' : 'bg-slate-200 border-white')}"></div>
+                    `;
+                    div.onclick = () => { selectedId = s.id; openEditor(s); };
+                    list.appendChild(div);
+                });
+            } catch (err) {
+                document.getElementById('status-chip').innerText = "❌ DB Error";
+                document.getElementById('status-chip').className = "text-[10px] font-black px-3 py-1 rounded-full bg-red-100 text-red-600 uppercase";
+            }
         }
 
-        function openSystem(s) {
-            document.getElementById('empty').classList.add('hidden');
-            document.getElementById('editor').classList.remove('hidden');
+        function openEditor(s) {
+            document.getElementById('empty').style.display = 'none';
+            document.getElementById('editor').style.display = 'block';
             document.getElementById('sys-id').innerText = s.id;
+            document.getElementById('sys-id-file').innerText = s.id;
             document.getElementById('notes').value = s.notes || '';
             
             const badge = document.getElementById('badge');
             const isDone = s.notes || s.has_attachment;
-            badge.innerText = isDone ? 'Complete': 'Pending';
-            badge.className = `px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${isDone ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`;
+            badge.innerText = isDone ? 'System Cleared' : 'Action Required';
+            badge.className = `px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${isDone ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-600'}`;
 
             const box = document.getElementById('dl-box');
             if (s.has_attachment) {
                 box.classList.remove('hidden');
-                document.getElementById('dl-link').href = `${SB_URL}/storage/v1/object/public/photos/${s.id}.jpg`;
+                document.getElementById('dl-link').href = `${DB_URL}/storage/v1/object/public/photos/${s.id}.jpg`;
             } else {
                 box.classList.add('hidden');
             }
-            refresh();
+            updateDashboard();
         }
 
         document.getElementById('save-btn').onclick = async () => {
             const btn = document.getElementById('save-btn');
-            btn.innerText = "SAVING...";
+            btn.innerText = "PUSHING DATA...";
             btn.disabled = true;
 
             const file = document.getElementById('file-input').files[0];
-            let has_attachment = (await supabase.from('systems').select('has_attachment').eq('id', activeId).single()).data.has_attachment;
+            let attachmentFound = false;
+
+            // Check existing status
+            const { data } = await appClient.from('systems').select('has_attachment').eq('id', selectedId).single();
+            attachmentFound = data?.has_attachment || false;
 
             if (file) {
-                await supabase.storage.from('photos').upload(`${activeId}.jpg`, file, { upsert: true });
-                has_attachment = true;
+                await appClient.storage.from('photos').upload(`${selectedId}.jpg`, file, { upsert: true });
+                attachmentFound = true;
             }
 
-            await supabase.from('systems').update({ 
+            await appClient.from('systems').update({ 
                 notes: document.getElementById('notes').value,
-                has_attachment: has_attachment
-            }).eq('id', activeId);
+                has_attachment: attachmentFound
+            }).eq('id', selectedId);
 
-            btn.innerText = "Save System Update";
+            btn.innerText = "Save & Push Update";
             btn.disabled = false;
-            refresh();
+            updateDashboard();
         };
 
-        document.getElementById('search').oninput = refresh;
-        refresh();
+        document.getElementById('search').oninput = updateDashboard;
         
-        // Auto-update every 10 seconds
-        setInterval(refresh, 10000);
+        // Start app
+        updateDashboard();
+        
+        // Real-time polling
+        setInterval(updateDashboard, 10000);
     </script>
 </body>
 </html>
