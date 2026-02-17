@@ -3,110 +3,169 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QA Navigator Pro</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <title>QA Management System</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; }
-        .modal-animate { animation: slideUp 0.3s ease-out; }
-        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    </style>
 </head>
-<body>
-    <div id="root"></div>
+<body class="bg-gray-50 text-gray-900 min-h-screen font-sans">
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+    <nav class="bg-white border-b sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                <h1 class="text-xl font-bold tracking-tight">QA Dashboard</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <input type="text" id="search" placeholder="Search ID..." class="px-4 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                <button onclick="addSystem()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition">+ Add System</button>
+            </div>
+        </div>
+    </nav>
 
-        // --- DATABASE CONFIG ---
-        const SB_URL = 'https://bbgcsddwzcrxwzczrojf.supabase.co';
-        const SB_KEY = 'sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f';
-        const supabase = window.supabase.createClient(SB_URL, SB_KEY);
+    <main class="max-w-7xl mx-auto p-8">
+        <div id="system-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            </div>
 
-        function App() {
-            const [systems, setSystems] = useState([]);
-            const [activeSys, setActiveSys] = useState(null);
-            const [notes, setNotes] = useState("");
-            const [filter, setFilter] = useState('all'); // all | pending | cleared
-            const [searchTerm, setSearchTerm] = useState('');
-            const [loading, setLoading] = useState(false);
+        <div class="mt-12 bg-gray-900 rounded-xl p-6 text-xs font-mono text-gray-400 shadow-inner">
+            <p class="text-gray-500 font-bold mb-2 uppercase border-b border-gray-800 pb-2">Console Diagnostics</p>
+            <div id="debug-log" class="h-32 overflow-y-auto space-y-1">
+                <p>> Dashboard Initialized. Awaiting Data...</p>
+            </div>
+        </div>
+    </main>
 
-            useEffect(() => { loadData(); }, []);
+    <div id="modal" class="fixed inset-0 bg-black/50 hidden backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden">
+            <div class="px-8 py-6 border-b flex justify-between items-center bg-gray-50">
+                <h2 class="text-2xl font-bold">System #<span id="display-id">--</span></h2>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            
+            <div class="p-8 space-y-6">
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Test Results</label>
+                    <textarea id="note-input" rows="5" class="w-full border border-gray-200 rounded-xl p-4 text-gray-700 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Enter findings..."></textarea>
+                </div>
 
-            const loadData = async () => {
-                const { data } = await supabase.from('systems').select('*').order('id');
-                setSystems(data || []);
-            };
+                <div id="file-box" class="hidden p-4 bg-blue-50 rounded-xl border border-blue-100 flex justify-between items-center">
+                    <span class="text-blue-700 font-bold text-sm underline">Photo Attached</span>
+                    <a id="file-download" href="#" target="_blank" class="bg-blue-600 text-white px-4 py-1 rounded text-xs font-bold">View</a>
+                </div>
 
-            const filteredData = useMemo(() => {
-                return systems.filter(item => {
-                    const matchesSearch = item.id.toLowerCase().includes(searchTerm.toLowerCase());
-                    const isDone = item.notes || item.has_attachment;
-                    if (filter === 'pending') return matchesSearch && !isDone;
-                    if (filter === 'cleared') return matchesSearch && isDone;
-                    return matchesSearch;
-                });
-            }, [systems, filter, searchTerm]);
+                <div class="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
+                    <p class="text-gray-400 text-sm mb-2">Upload New Attachment</p>
+                    <input type="file" id="upload-field" class="text-xs">
+                </div>
 
-            const handleSave = async () => {
-                setLoading(true);
-                const file = document.getElementById('file-upload')?.files[0];
-                let hasAttach = activeSys.has_attachment;
+                <div class="flex gap-3">
+                    <button id="sync-btn" class="flex-1 bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 transition">Save & Update</button>
+                    <button onclick="deleteSystem()" class="bg-red-50 text-red-600 px-6 rounded-xl font-bold hover:bg-red-100 transition">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-                if (file) {
-                    await supabase.storage.from('photos').upload(`${activeSys.id}.jpg`, file, { upsert: true });
-                    hasAttach = true;
-                }
+    <script>
+        // 1. YOUR CONFIG
+        const DB_URL = 'https://bbgcsddwzcrxwzczrojf.supabase.co'; 
+        const DB_KEY = 'sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f';
+        const client = window.supabase.createClient(DB_URL, DB_KEY);
 
-                await supabase.from('systems').update({ notes, has_attachment: hasAttach }).eq('id', activeSys.id);
-                setLoading(false);
-                setActiveSys(null);
-                loadData();
-            };
+        let activeId = null;
 
-            return (
-                <div className="min-h-screen pb-20">
-                    {/* STICKY HEADER */}
-                    <nav className="bg-white/80 backdrop-blur-md border-b sticky top-0 z-20 px-6 py-4">
-                        <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-4 justify-between items-center">
-                            <div className="flex items-center gap-2">
-                                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
-                                    <span className="text-white font-extrabold text-xl">Q</span>
-                                </div>
-                                <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">NAVIGATOR</h1>
-                            </div>
+        function log(msg, isErr = false) {
+            const div = document.getElementById('debug-log');
+            const p = document.createElement('p');
+            p.className = isErr ? 'text-red-400' : 'text-green-400';
+            p.innerText = `> [${new Date().toLocaleTimeString()}] ${msg}`;
+            div.prepend(p);
+        }
 
-                            <div className="flex items-center gap-3 w-full md:w-auto">
-                                <input 
-                                    type="text" 
-                                    placeholder="Search System ID..." 
-                                    className="flex-1 md:w-64 px-4 py-2 bg-slate-100 rounded-xl outline-none border-2 border-transparent focus:border-indigo-500 transition-all text-sm"
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                />
-                                <button 
-                                    onClick={() => {
-                                        const id = prompt("New System ID:");
-                                        if(id) supabase.from('systems').insert([{id}]).then(loadData);
-                                    }}
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap"
-                                >
-                                    + Add Unit
-                                </button>
-                            </div>
+        async function loadData() {
+            try {
+                const { data, error } = await client.from('systems').select('*').order('id');
+                if (error) throw error;
+
+                const search = document.getElementById('search').value.toLowerCase();
+                const grid = document.getElementById('system-grid');
+                grid.innerHTML = '';
+
+                data.filter(s => s.id.includes(search)).forEach(s => {
+                    const isDone = s.notes || s.has_attachment;
+                    const card = document.createElement('div');
+                    card.className = "bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition cursor-pointer relative group";
+                    card.innerHTML = `
+                        <div class="flex justify-between items-start mb-4">
+                            <span class="text-3xl font-black text-gray-800">#${s.id}</span>
+                            <span class="px-2 py-1 rounded text-[10px] font-bold uppercase ${isDone ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}">${isDone ? 'Cleared' : 'Pending'}</span>
                         </div>
-                    </nav>
+                        <p class="text-gray-500 text-sm line-clamp-2 mb-4">${s.notes || 'No results recorded yet...'}</p>
+                        ${s.has_attachment ? '<div class="text-blue-500 text-xs font-bold">📎 Photo Attached</div>' : ''}
+                    `;
+                    card.onclick = () => openModal(s);
+                    grid.appendChild(card);
+                });
+            } catch (err) {
+                log("DB Error: " + err.message, true);
+            }
+        }
 
-                    {/* FILTER TABS */}
-                    <div className="max-w-6xl mx-auto px-6 mt-8">
-                        <div className="flex p-1 bg-slate-200 rounded-2xl w-fit">
-                            {['all', 'pending', 'cleared'].map(t => (
-                                <button 
-                                    key={t}
-                                    onClick={() => setFilter(t)}
-                                    className={`px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${filter === t ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                                >
-                                    {t
+        function openModal(s) {
+            activeId = s.id;
+            document.getElementById('modal').classList.remove('hidden');
+            document.getElementById('display-id').innerText = s.id;
+            document.getElementById('note-input').value = s.notes || '';
+            
+            const box = document.getElementById('file-box');
+            if (s.has_attachment) {
+                box.classList.remove('hidden');
+                document.getElementById('file-download').href = `${DB_URL}/storage/v1/object/public/photos/${s.id}.jpg`;
+            } else { box.classList.add('hidden'); }
+        }
+
+        function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+
+        async function addSystem() {
+            const id = prompt("System ID:");
+            if (!id) return;
+            const { error } = await client.from('systems').insert([{ id: id }]);
+            if (error) log(error.message, true);
+            else { log(`System #${id} added.`); loadData(); }
+        }
+
+        async function deleteSystem() {
+            if (!confirm("Delete this system?")) return;
+            const { error } = await client.from('systems').delete().eq('id', activeId);
+            if (error) log(error.message, true);
+            else { log(`System #${activeId} removed.`); closeModal(); loadData(); }
+        }
+
+        document.getElementById('sync-btn').onclick = async () => {
+            const btn = document.getElementById('sync-btn');
+            btn.innerText = "Saving..."; btn.disabled = true;
+
+            const file = document.getElementById('upload-field').files[0];
+            let hasAttach = (await client.from('systems').select('has_attachment').eq('id', activeId).single()).data.has_attachment;
+
+            if (file) {
+                const { error } = await client.storage.from('photos').upload(`${activeId}.jpg`, file, { upsert: true });
+                if (error) log("Storage Error: " + error.message, true);
+                else hasAttach = true;
+            }
+
+            const { error } = await client.from('systems').update({ 
+                notes: document.getElementById('note-input').value, 
+                has_attachment: hasAttach 
+            }).eq('id', activeId);
+
+            if (error) log("Update Error: " + error.message, true);
+            else { log(`System #${activeId} updated.`); closeModal(); loadData(); }
+            
+            btn.innerText = "Save & Update"; btn.disabled = false;
+        };
+
+        document.getElementById('search').oninput = loadData;
+        loadData();
+    </script>
+</body>
+</html>
