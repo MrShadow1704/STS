@@ -3,23 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QA System Manager</title>
+    <title>QA Navigator Pro</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        .system-card:hover { transform: translateY(-2px); }
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; }
+        .modal-animate { animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-900">
+<body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useMemo } = React;
 
         // --- DATABASE CONFIG ---
         const SB_URL = 'https://bbgcsddwzcrxwzczrojf.supabase.co';
@@ -30,6 +31,8 @@
             const [systems, setSystems] = useState([]);
             const [activeSys, setActiveSys] = useState(null);
             const [notes, setNotes] = useState("");
+            const [filter, setFilter] = useState('all'); // all | pending | cleared
+            const [searchTerm, setSearchTerm] = useState('');
             const [loading, setLoading] = useState(false);
 
             useEffect(() => { loadData(); }, []);
@@ -38,6 +41,16 @@
                 const { data } = await supabase.from('systems').select('*').order('id');
                 setSystems(data || []);
             };
+
+            const filteredData = useMemo(() => {
+                return systems.filter(item => {
+                    const matchesSearch = item.id.toLowerCase().includes(searchTerm.toLowerCase());
+                    const isDone = item.notes || item.has_attachment;
+                    if (filter === 'pending') return matchesSearch && !isDone;
+                    if (filter === 'cleared') return matchesSearch && isDone;
+                    return matchesSearch;
+                });
+            }, [systems, filter, searchTerm]);
 
             const handleSave = async () => {
                 setLoading(true);
@@ -50,129 +63,50 @@
                 }
 
                 await supabase.from('systems').update({ notes, has_attachment: hasAttach }).eq('id', activeSys.id);
-                
                 setLoading(false);
                 setActiveSys(null);
                 loadData();
             };
 
-            const deleteSystem = async (id) => {
-                if (!confirm("Delete this system?")) return;
-                await supabase.from('systems').delete().eq('id', id);
-                setActiveSys(null);
-                loadData();
-            };
-
             return (
-                <div className="min-h-screen">
-                    {/* NAVBAR */}
-                    <nav className="bg-white border-b px-6 py-4 sticky top-0 z-10 shadow-sm">
-                        <div className="max-w-6xl mx-auto flex justify-between items-center">
-                            <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                                <div className="w-2 h-6 bg-blue-600 rounded-full"></div>
-                                QA Navigator
-                            </h1>
-                            <button 
-                                onClick={() => {
-                                    const id = prompt("Enter System Number:");
-                                    if(id) supabase.from('systems').insert([{id}]).then(loadData);
-                                }}
-                                className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors"
-                            >
-                                + Add Unit
-                            </button>
+                <div className="min-h-screen pb-20">
+                    {/* STICKY HEADER */}
+                    <nav className="bg-white/80 backdrop-blur-md border-b sticky top-0 z-20 px-6 py-4">
+                        <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-4 justify-between items-center">
+                            <div className="flex items-center gap-2">
+                                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                                    <span className="text-white font-extrabold text-xl">Q</span>
+                                </div>
+                                <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">NAVIGATOR</h1>
+                            </div>
+
+                            <div className="flex items-center gap-3 w-full md:w-auto">
+                                <input 
+                                    type="text" 
+                                    placeholder="Search System ID..." 
+                                    className="flex-1 md:w-64 px-4 py-2 bg-slate-100 rounded-xl outline-none border-2 border-transparent focus:border-indigo-500 transition-all text-sm"
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                                <button 
+                                    onClick={() => {
+                                        const id = prompt("New System ID:");
+                                        if(id) supabase.from('systems').insert([{id}]).then(loadData);
+                                    }}
+                                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap"
+                                >
+                                    + Add Unit
+                                </button>
+                            </div>
                         </div>
                     </nav>
 
-                    {/* MAIN GRID */}
-                    <main className="max-w-6xl mx-auto p-6 md:p-10">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {systems.map(s => (
-                                <div 
-                                    key={s.id}
-                                    onClick={() => { setActiveSys(s); setNotes(s.notes || ""); }}
-                                    className="system-card bg-white p-6 rounded-2xl border border-gray-200 shadow-sm transition-all cursor-pointer flex flex-col justify-between"
+                    {/* FILTER TABS */}
+                    <div className="max-w-6xl mx-auto px-6 mt-8">
+                        <div className="flex p-1 bg-slate-200 rounded-2xl w-fit">
+                            {['all', 'pending', 'cleared'].map(t => (
+                                <button 
+                                    key={t}
+                                    onClick={() => setFilter(t)}
+                                    className={`px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${filter === t ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                                 >
-                                    <div>
-                                        <div className="flex justify-between items-start mb-4">
-                                            <span className="bg-gray-100 text-gray-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                                                ID {s.id}
-                                            </span>
-                                            <div className={`h-2 w-2 rounded-full ${s.notes || s.has_attachment ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-gray-200'}`} />
-                                        </div>
-                                        <p className="text-gray-500 text-sm leading-relaxed line-clamp-3">
-                                            {s.notes || "Awaiting testing diagnostics..."}
-                                        </p>
-                                    </div>
-                                    {s.has_attachment && (
-                                        <div className="mt-4 pt-4 border-t border-gray-50 text-[10px] font-bold text-blue-500 uppercase flex items-center gap-1">
-                                            📎 Image Linked
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </main>
-
-                    {/* EDIT MODAL */}
-                    {activeSys && (
-                        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                                <div className="p-8">
-                                    <div className="flex justify-between items-center mb-6">
-                                        <h2 className="text-2xl font-bold">System {activeSys.id}</h2>
-                                        <button onClick={() => setActiveSys(null)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
-                                    </div>
-                                    
-                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-2">Findings</label>
-                                    <textarea 
-                                        className="w-full h-36 border border-gray-200 rounded-xl p-4 mb-6 focus:ring-2 focus:ring-blue-500 outline-none transition-all text-gray-700"
-                                        value={notes}
-                                        onChange={(e) => setNotes(e.target.value)}
-                                        placeholder="Type test results here..."
-                                    />
-
-                                    <div className="mb-6">
-                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-2">Evidence</label>
-                                        <div className="flex flex-col gap-3">
-                                            {activeSys.has_attachment && (
-                                                <a 
-                                                    href={`${SB_URL}/storage/v1/object/public/photos/${activeSys.id}.jpg`} 
-                                                    target="_blank" 
-                                                    className="text-xs text-blue-600 font-bold underline"
-                                                >
-                                                    View Current Attachment
-                                                </a>
-                                            )}
-                                            <input type="file" id="file-upload" className="text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-                                        </div>
-                                    </div>
-
-                                    <div className="flex gap-3 pt-4">
-                                        <button 
-                                            disabled={loading}
-                                            onClick={handleSave} 
-                                            className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all disabled:opacity-50"
-                                        >
-                                            {loading ? "Saving..." : "Save Changes"}
-                                        </button>
-                                        <button 
-                                            onClick={() => deleteSystem(activeSys.id)}
-                                            className="px-6 py-3 rounded-xl font-bold text-red-500 border border-red-100 hover:bg-red-50 transition-all"
-                                        >
-                                            Delete
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
+                                    {t
