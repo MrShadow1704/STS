@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -12,33 +12,21 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-
-body { font-family: 'Inter', sans-serif; }
-
-.fade-in { animation: fadeIn .4s ease forwards; }
-@keyframes fadeIn { from { opacity:0; transform:translateY(5px);} to {opacity:1; transform:none;} }
-
+body { font-family: Inter, sans-serif; background:#0f172a; color:#e2e8f0; }
 .success-flash { animation: flash .8s ease; }
 @keyframes flash {
-  0% { background:#022c22; }
-  50% { background:#065f46; }
-  100% { background:#0f172a; }
-}
-
-.green-pop { animation: pop .5s ease; }
-@keyframes pop {
-  0% { transform:scale(.7); opacity:0; }
-  60% { transform:scale(1.1); }
-  100% { transform:scale(1); opacity:1; }
+0%{background:#022c22;}
+50%{background:#065f46;}
+100%{background:#0f172a;}
 }
 </style>
 </head>
 
-<body class="bg-slate-900 text-slate-200">
+<body>
 <div id="root"></div>
 
 <script type="text/babel">
+
 const { useState, useEffect } = React;
 
 const SB_URL = "https://bbgcsddwzcrxwzczrojf.supabase.co";
@@ -52,96 +40,133 @@ const [active,setActive]=useState(null);
 const [notes,setNotes]=useState("");
 const [photos,setPhotos]=useState([]);
 const [loading,setLoading]=useState(false);
-const [savedAnim,setSavedAnim]=useState(false);
+const [flash,setFlash]=useState(false);
 const [search,setSearch]=useState("");
 
 useEffect(()=>{loadSystems()},[]);
 
 async function loadSystems(){
-  const {data}=await supabase.from("systems").select("*").order("id");
-  setSystems(data||[]);
+const {data,error}=await supabase.from("systems").select("*").order("id");
+if(error) console.error(error);
+setSystems(data||[]);
 }
 
 useEffect(()=>{
-  if(active){
-    setNotes(active.notes||"");
-    fetchPhotos(active.id);
-  }else setPhotos([]);
+if(active){
+setNotes(active.notes||"");
+fetchPhotos(active.id);
+}else{
+setPhotos([]);
+}
 },[active]);
 
+/* FETCH PHOTOS */
 async function fetchPhotos(id){
-  const {data,error}=await supabase.storage
-  .from("photos")
-  .list(id,{limit:100,sortBy:{column:"name",order:"desc"}});
 
-  if(error){console.error(error);return;}
+const {data,error}=await supabase.storage
+.from("photos")
+.list(id);
 
-  const urls=data?.map(file=>{
-    const {data:{publicUrl}}=
-      supabase.storage.from("photos")
-      .getPublicUrl(`${id}/${file.name}`);
-    return publicUrl+`?t=${Date.now()}`;
-  })||[];
-
-  setPhotos(urls);
+if(error){
+console.error("List error:",error);
+setPhotos([]);
+return;
 }
 
+if(!data || data.length===0){
+setPhotos([]);
+return;
+}
+
+const urls=data.map(file=>{
+const {data:{publicUrl}}=
+supabase.storage.from("photos")
+.getPublicUrl(`${id}/${file.name}`);
+return publicUrl + `?t=${Date.now()}`;
+});
+
+setPhotos(urls);
+}
+
+/* SAVE */
 async function handleSave(){
-  if(!active)return;
-  setLoading(true);
 
-  const input=document.getElementById("file-upload");
-  const files=input?.files;
-  let hasAttach=active.has_attachment;
+if(!active) return;
+setLoading(true);
 
-  if(files && files.length>0){
-    for(let i=0;i<files.length;i++){
-      const path=`${active.id}/${Date.now()}_${i}.jpg`;
-      const {error}=await supabase.storage
-        .from("photos")
-        .upload(path,files[i]);
-      if(!error) hasAttach=true;
-    }
-  }
+const input=document.getElementById("file-upload");
+const files=input?.files;
 
-  await supabase.from("systems")
-    .update({notes,has_attachment:hasAttach})
-    .eq("id",active.id);
+let hasAttach = active.has_attachment || false;
 
-  await loadSystems();
-  await fetchPhotos(active.id);
+if(files && files.length>0){
 
-  input.value="";
-  setSavedAnim(true);
-  setTimeout(()=>setSavedAnim(false),800);
-  setLoading(false);
+for(let i=0;i<files.length;i++){
+
+const path=`${active.id}/${Date.now()}_${files[i].name}`;
+
+const {error}=await supabase.storage
+.from("photos")
+.upload(path,files[i],{upsert:true});
+
+if(error){
+console.error("Upload error:",error);
+}else{
+hasAttach=true;
+}
+}
 }
 
+const {error:updateError}=await supabase
+.from("systems")
+.update({notes,has_attachment:hasAttach})
+.eq("id",active.id);
+
+if(updateError) console.error(updateError);
+
+await fetchPhotos(active.id);
+await loadSystems();
+
+if(input) input.value="";
+
+setFlash(true);
+setTimeout(()=>setFlash(false),800);
+
+setLoading(false);
+}
+
+/* ADD SYSTEM */
 async function addSystem(){
-  const id=prompt("Enter System ID");
-  if(!id)return;
-  await supabase.from("systems").insert([{id}]);
-  loadSystems();
+const id=prompt("Enter System ID:");
+if(!id) return;
+
+const {error}=await supabase
+.from("systems")
+.insert([{id,notes:"",has_attachment:false}]);
+
+if(error) alert("ID already exists");
+else loadSystems();
 }
 
+/* DELETE SYSTEM */
 async function deleteSystem(){
-  if(!confirm("Delete this system?"))return;
-  await supabase.from("systems").delete().eq("id",active.id);
-  setActive(null);
-  loadSystems();
+if(!confirm("Delete this system?")) return;
+await supabase.from("systems").delete().eq("id",active.id);
+setActive(null);
+loadSystems();
 }
 
 return(
-<div className={`flex h-screen transition-all ${savedAnim?"success-flash":""}`}>
+<div className={`flex h-screen ${flash?"success-flash":""}`}>
 
 {/* SIDEBAR */}
 <div className="w-72 bg-slate-950 border-r border-slate-800 flex flex-col">
 
 <div className="p-6 border-b border-slate-800">
-<h1 className="text-2xl font-extrabold tracking-tight text-emerald-400">
+<h1 className="text-2xl font-bold text-emerald-400">
 STS QAQC
 </h1>
-<p className="text-xs text-slate-500 mt-1">Quality Assurance Dashboard</p>
+<p className="text-xs text-slate-500">Quality Dashboard</p>
 </div>
 
 <div className="p-4 space-y-3">
@@ -158,17 +183,18 @@ onChange={e=>setSearch(e.target.value)}
 </div>
 
 <div className="flex-1 overflow-y-auto px-3 space-y-2 pb-4">
-{systems.filter(s=>s.id.toLowerCase().includes(search.toLowerCase()))
+{systems
+.filter(s=>s.id.toLowerCase().includes(search.toLowerCase()))
 .map(s=>(
 <div key={s.id}
 onClick={()=>setActive(s)}
 className={`p-3 rounded-lg cursor-pointer transition flex justify-between items-center
 ${active?.id===s.id?"bg-emerald-600/20 border border-emerald-500":"bg-slate-800 hover:bg-slate-700"}`}>
 
-<span className="font-medium">#{s.id}</span>
+<span>#{s.id}</span>
 
 {s.has_attachment &&
-<span className="w-2 h-2 bg-emerald-400 rounded-full green-pop"></span>}
+<span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>}
 
 </div>
 ))}
@@ -176,7 +202,7 @@ ${active?.id===s.id?"bg-emerald-600/20 border border-emerald-500":"bg-slate-800 
 </div>
 
 {/* MAIN */}
-<div className="flex-1 p-10 overflow-y-auto fade-in">
+<div className="flex-1 p-10 overflow-y-auto">
 
 {active?(
 <div className="max-w-4xl mx-auto space-y-8">
@@ -228,7 +254,7 @@ className="absolute inset-0 opacity-0 cursor-pointer"/>
 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
 {photos.map((url,i)=>(
 <div key={i}
-className="rounded-lg overflow-hidden bg-slate-800 hover:scale-105 transition">
+className="rounded-lg overflow-hidden bg-slate-800">
 <img src={url}
 className="w-full h-32 object-cover"/>
 </div>
@@ -250,6 +276,7 @@ Select a system to begin
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+
 </script>
 </body>
 </html>
