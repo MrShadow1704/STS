@@ -3,29 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QA Navigator Pro</title>
+    <title>QA Emerald Navigator</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
+        .system-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .system-card:active { transform: scale(0.97); }
+    </style>
 </head>
-<body class="bg-slate-50">
-    <div id="root">
-        <div style="padding: 50px; text-align: center; font-family: sans-serif;">
-            <h2>Loading System Navigator...</h2>
-            <p>If this screen stays blank for more than 5 seconds, check the Console (F12) for errors.</p>
-        </div>
-    </div>
+<body>
+    <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // --- REPLACE THESE ---
         const SB_URL = 'https://bbgcsddwzcrxwzczrojf.supabase.co'; 
         const SB_KEY = 'sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f';
-        
-        // Initialize Supabase
         const supabase = window.supabase.createClient(SB_URL, SB_KEY);
 
         function App() {
@@ -39,13 +37,8 @@
             useEffect(() => { loadData(); }, []);
 
             async function loadData() {
-                try {
-                    const { data, error } = await supabase.from('systems').select('*').order('id');
-                    if (error) throw error;
-                    setSystems(data || []);
-                } catch (e) {
-                    console.error("Load Error:", e.message);
-                }
+                const { data } = await supabase.from('systems').select('*').order('id');
+                setSystems(data || []);
             }
 
             const filteredData = useMemo(() => {
@@ -60,67 +53,125 @@
 
             async function handleSave() {
                 setLoading(true);
-                const file = document.getElementById('file-upload')?.files[0];
+                const fileInput = document.getElementById('file-upload');
+                const files = fileInput?.files;
                 let hasAttach = activeSys.has_attachment;
 
-                if (file) {
-                    await supabase.storage.from('photos').upload(`${activeSys.id}.jpg`, file, { upsert: true });
+                if (files && files.length > 0) {
+                    // Upload multiple photos with unique timestamps
+                    for (let i = 0; i < files.length; i++) {
+                        const fileName = `${activeSys.id}_${Date.now()}_${i}.jpg`;
+                        await supabase.storage.from('photos').upload(fileName, files[i]);
+                    }
                     hasAttach = true;
                 }
 
-                await supabase.from('systems').update({ notes, has_attachment: hasAttach }).eq('id', activeSys.id);
+                await supabase.from('systems').update({ 
+                    notes, 
+                    has_attachment: hasAttach 
+                }).eq('id', activeSys.id);
+
                 setLoading(false);
                 setActiveSys(null);
                 loadData();
             }
 
             return (
-                <div className="min-h-screen pb-10">
-                    <nav className="bg-white border-b px-6 py-4 sticky top-0 z-20">
-                        <div className="max-w-6xl mx-auto flex justify-between items-center">
-                            <h1 className="text-xl font-bold text-indigo-600">QA NAVIGATOR</h1>
-                            <div className="flex gap-2">
-                                <input 
-                                    className="bg-slate-100 px-4 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                                    placeholder="Search ID..."
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                />
+                <div className="min-h-screen">
+                    {/* GIANT SEARCH & HEADER */}
+                    <div className="bg-white border-b px-6 py-8 shadow-sm">
+                        <div className="max-w-screen-2xl mx-auto space-y-6">
+                            <div className="flex justify-between items-center">
+                                <h1 className="text-3xl font-extrabold tracking-tighter text-slate-900">QA <span className="text-emerald-500">SYSTEMS</span></h1>
                                 <button onClick={() => {
-                                    const id = prompt("ID:");
+                                    const id = prompt("Create New System ID:");
                                     if(id) supabase.from('systems').insert([{id}]).then(loadData);
-                                }} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">+</button>
+                                }} className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-bold hover:bg-emerald-600 transition-colors">
+                                    + Add New Unit
+                                </button>
                             </div>
-                        </div>
-                    </nav>
+                            
+                            <input 
+                                className="w-full text-2xl font-bold p-6 bg-slate-100 rounded-[2rem] border-4 border-transparent focus:border-emerald-400 outline-none transition-all placeholder:text-slate-300"
+                                placeholder="TYPE SYSTEM ID TO SEARCH..."
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
 
-                    <div className="max-w-6xl mx-auto px-6 mt-6">
-                        <div className="flex bg-slate-200 p-1 rounded-xl w-fit mb-8">
-                            {['all', 'pending', 'cleared'].map(t => (
-                                <button key={t} onClick={() => setFilter(t)} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase ${filter === t ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>{t}</button>
-                            ))}
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                            {filteredData.map(s => (
-                                <div key={s.id} onClick={() => {setActiveSys(s); setNotes(s.notes || "");}} className="bg-white p-6 rounded-3xl border border-slate-200 hover:shadow-xl transition-all cursor-pointer">
-                                    <div className="flex justify-between mb-4">
-                                        <span className="font-bold text-slate-400">#{s.id}</span>
-                                        <div className={`h-2 w-2 rounded-full ${s.notes || s.has_attachment ? 'bg-green-500' : 'bg-slate-200'}`} />
-                                    </div>
-                                    <p className="text-sm text-slate-600 line-clamp-2">{s.notes || "No data..."}</p>
-                                </div>
-                            ))}
+                            <div className="flex gap-4">
+                                {['all', 'pending', 'cleared'].map(t => (
+                                    <button 
+                                        key={t} 
+                                        onClick={() => setFilter(t)} 
+                                        className={`flex-1 py-4 rounded-2xl text-sm font-black uppercase tracking-widest border-2 transition-all ${filter === t ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-200' : 'bg-white border-slate-100 text-slate-400'}`}
+                                    >
+                                        {t}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
 
+                    {/* FULL WIDTH GRID */}
+                    <main className="max-w-screen-2xl mx-auto p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                        {filteredData.map(s => {
+                            const isDone = s.notes || s.has_attachment;
+                            return (
+                                <div 
+                                    key={s.id} 
+                                    onClick={() => {setActiveSys(s); setNotes(s.notes || "");}} 
+                                    className={`system-card p-8 rounded-[2.5rem] cursor-pointer shadow-sm flex flex-col justify-between min-h-[250px] ${isDone ? 'bg-emerald-500 text-white shadow-emerald-100' : 'bg-white border-2 border-slate-100 text-slate-800 hover:border-emerald-300'}`}
+                                >
+                                    <div>
+                                        <div className="flex justify-between items-center mb-6">
+                                            <span className={`text-3xl font-extrabold tracking-tighter ${isDone ? 'text-white' : 'text-slate-900'}`}>#{s.id}</span>
+                                            <div className={`p-3 rounded-full ${isDone ? 'bg-emerald-400' : 'bg-slate-100'}`}>
+                                                {isDone ? (
+                                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                                                ) : (
+                                                    <svg className="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <p className={`text-lg font-medium leading-tight line-clamp-3 ${isDone ? 'text-emerald-50' : 'text-slate-400'}`}>
+                                            {s.notes || "No diagnostic results recorded yet..."}
+                                        </p>
+                                    </div>
+                                    {s.has_attachment && (
+                                        <div className="mt-4 flex gap-1">
+                                            <span className="bg-white/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">📸 Multi-Photo</span>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </main>
+
+                    {/* MODAL EDITOR */}
                     {activeSys && (
-                        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                            <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-10">
-                                <h2 className="text-2xl font-bold mb-6 text-slate-800">System {activeSys.id}</h2>
-                                <textarea className="w-full h-40 bg-slate-50 border rounded-2xl p-4 mb-4 outline-none focus:ring-2 focus:ring-indigo-500" value={notes} onChange={(e) => setNotes(e.target.value)} />
-                                <input type="file" id="file-upload" className="text-xs mb-6 block" />
-                                <button disabled={loading} onClick={handleSave} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-indigo-600 transition-all">{loading ? "Saving..." : "Save Data"}</button>
-                                <button onClick={() => setActiveSys(null)} className="w-full text-slate-400 mt-2 text-sm">Cancel</button>
+                        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xl flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+                            <div className="bg-white w-full max-w-2xl rounded-t-[3rem] sm:rounded-[3rem] p-10 shadow-2xl overflow-y-auto max-h-[90vh]">
+                                <div className="flex justify-between items-center mb-10">
+                                    <h2 className="text-4xl font-black text-slate-900">System {activeSys.id}</h2>
+                                    <button onClick={() => setActiveSys(null)} className="text-slate-300 hover:text-slate-900 transition-colors text-5xl">&times;</button>
+                                </div>
+                                
+                                <div className="space-y-8">
+                                    <div>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-4">Inspection Findings</label>
+                                        <textarea className="w-full h-48 bg-slate-50 border-2 border-slate-100 rounded-[2rem] p-6 text-xl text-slate-700 focus:border-emerald-500 outline-none transition-all" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Type findings here..." />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-4">Media Attachments (Select Multiple)</label>
+                                        <div className="bg-slate-50 border-4 border-dashed border-slate-100 rounded-[2rem] p-10 text-center relative group hover:border-emerald-200 transition-colors">
+                                            <p className="text-slate-400 font-bold">CLICK TO ADD PHOTOS</p>
+                                            <input type="file" id="file-upload" multiple className="absolute inset-0 opacity-0 cursor-pointer" />
+                                        </div>
+                                    </div>
+
+                                    <button disabled={loading} onClick={handleSave} className="w-full bg-emerald-500 text-white py-6 rounded-[2rem] font-black text-lg uppercase tracking-widest shadow-xl shadow-emerald-200 hover:bg-emerald-600 active:scale-95 transition-all">
+                                        {loading ? "SYNCING DATA..." : "FINALIZE & SAVE"}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
