@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QA EMERALD V3</title>
+    <title>QA Split-View Pro</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -11,183 +11,169 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; }
-        .emerald-gradient { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; height: 100vh; overflow: hidden; }
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .active-card { border-left: 8px solid #10b981 !important; background-color: #f0fdf4 !important; }
     </style>
 </head>
-<body class="bg-slate-50">
-    <div id="root">
-        <div class="flex items-center justify-center h-screen text-slate-400 font-bold animate-pulse">
-            INITIALIZING CORE...
-        </div>
-    </div>
+<body class="bg-white">
+    <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect } = React;
 
-        // --- 1. CONFIG (STRICT CHECK) ---
         const SB_URL = 'https://bbgcsddwzcrxwzczrojf.supabase.co'; 
         const SB_KEY = 'sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f';
-        
-        let supabase;
-        try {
-            supabase = window.supabase.createClient(SB_URL, SB_KEY);
-        } catch (e) {
-            document.getElementById('root').innerHTML = `<div class="p-10 text-red-500 font-bold">CONFIG ERROR: Check your URL/Key quotes.</div>`;
-        }
+        const supabase = window.supabase.createClient(SB_URL, SB_KEY);
 
         function App() {
             const [systems, setSystems] = useState([]);
             const [activeSys, setActiveSys] = useState(null);
             const [notes, setNotes] = useState("");
-            const [filter, setFilter] = useState('all');
-            const [searchTerm, setSearchTerm] = useState('');
+            const [photos, setPhotos] = useState([]);
             const [loading, setLoading] = useState(false);
-            const [error, setError] = useState(null);
+            const [searchTerm, setSearchTerm] = useState('');
 
             useEffect(() => { loadData(); }, []);
 
             async function loadData() {
-                try {
-                    const { data, error: dbErr } = await supabase.from('systems').select('*').order('id');
-                    if (dbErr) throw dbErr;
-                    setSystems(data || []);
-                    setError(null);
-                } catch (e) {
-                    setError("Database Connection Failed: " + e.message);
+                const { data } = await supabase.from('systems').select('*').order('id');
+                setSystems(data || []);
+            }
+
+            // Fetch images for the active system
+            useEffect(() => {
+                if (activeSys) {
+                    setNotes(activeSys.notes || "");
+                    fetchPhotos();
+                }
+            }, [activeSys]);
+
+            async function fetchPhotos() {
+                const { data, error } = await supabase.storage.from('photos').list('', {
+                    search: `${activeSys.id}_`
+                });
+                if (data) {
+                    const urls = data.map(file => 
+                        supabase.storage.from('photos').getPublicUrl(file.name).data.publicUrl
+                    );
+                    setPhotos(urls);
                 }
             }
 
-            const filteredData = useMemo(() => {
-                return systems.filter(item => {
-                    const matchesSearch = item.id.toLowerCase().includes(searchTerm.toLowerCase());
-                    const isDone = item.notes || item.has_attachment;
-                    if (filter === 'pending') return matchesSearch && !isDone;
-                    if (filter === 'cleared') return matchesSearch && isDone;
-                    return matchesSearch;
-                });
-            }, [systems, filter, searchTerm]);
-
             async function handleSave() {
-                if (!activeSys) return;
                 setLoading(true);
                 const fileInput = document.getElementById('file-upload');
                 const files = fileInput?.files;
                 let hasAttach = activeSys.has_attachment;
 
-                try {
-                    if (files && files.length > 0) {
-                        for (let i = 0; i < files.length; i++) {
-                            const fileName = `${activeSys.id}_${Date.now()}_${i}.jpg`;
-                            await supabase.storage.from('photos').upload(fileName, files[i]);
-                        }
-                        hasAttach = true;
+                if (files && files.length > 0) {
+                    for (let i = 0; i < files.length; i++) {
+                        const fileName = `${activeSys.id}_${Date.now()}_${i}.jpg`;
+                        await supabase.storage.from('photos').upload(fileName, files[i]);
                     }
-                    await supabase.from('systems').update({ notes, has_attachment: hasAttach }).eq('id', activeSys.id);
-                    setActiveSys(null);
-                    loadData();
-                } catch (e) {
-                    alert("Upload Failed: " + e.message);
-                } finally {
-                    setLoading(false);
+                    hasAttach = true;
                 }
+
+                await supabase.from('systems').update({ notes, has_attachment: hasAttach }).eq('id', activeSys.id);
+                setLoading(false);
+                loadData();
+                fetchPhotos();
+                alert("System Sync Complete");
             }
 
-            if (error) return <div className="p-20 text-center"><h1 className="text-red-500 font-black text-2xl">{error}</h1><button onClick={() => location.reload()} className="mt-4 bg-slate-900 text-white px-6 py-2 rounded-xl">Retry Connection</button></div>;
+            const filtered = systems.filter(s => s.id.toLowerCase().includes(searchTerm.toLowerCase()));
 
             return (
-                <div className="min-h-screen pb-20">
-                    {/* GIANT SEARCH AREA */}
-                    <div className="bg-white border-b p-6 md:p-12">
-                        <div className="max-w-screen-2xl mx-auto space-y-8">
-                            <div className="flex justify-between items-center">
-                                <h1 className="text-4xl font-extrabold tracking-tighter italic">EMERALD<span className="text-emerald-500">QA</span></h1>
-                                <button onClick={() => {
-                                    const id = prompt("System ID:");
-                                    if(id) supabase.from('systems').insert([{id}]).then(loadData);
-                                }} className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-sm hover:scale-105 transition-transform shadow-xl">ADD UNIT</button>
-                            </div>
-
-                            <div className="relative">
-                                <input 
-                                    className="w-full text-3xl md:text-5xl font-extrabold p-8 bg-slate-100 rounded-[2.5rem] border-none focus:ring-8 focus:ring-emerald-100 outline-none transition-all placeholder:text-slate-200"
-                                    placeholder="SEARCH SYSTEM ID..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                />
-                            </div>
-
-                            <div className="flex gap-4">
-                                {['all', 'pending', 'cleared'].map(t => (
-                                    <button key={t} onClick={() => setFilter(t)} className={`flex-1 py-5 rounded-2xl text-xs font-black uppercase tracking-[0.2em] transition-all ${filter === t ? 'bg-emerald-500 text-white shadow-2xl shadow-emerald-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>{t}</button>
-                                ))}
-                            </div>
+                <div className="flex h-screen w-full overflow-hidden">
+                    {/* LEFT SIDEBAR: LIST */}
+                    <aside className="w-1/3 lg:w-1/4 border-r border-slate-100 flex flex-col bg-slate-50">
+                        <div className="p-6 bg-white border-b">
+                            <h1 className="text-xl font-black mb-4">QA <span className="text-emerald-500">NAV</span></h1>
+                            <input 
+                                className="w-full bg-slate-100 p-3 rounded-xl text-sm outline-none border-2 border-transparent focus:border-emerald-400"
+                                placeholder="Search ID..."
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
                         </div>
-                    </div>
-
-                    {/* DYNAMIC GRID */}
-                    <main className="max-w-screen-2xl mx-auto p-6 md:p-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-8">
-                        {filteredData.map(s => {
-                            const isDone = s.notes || s.has_attachment;
-                            return (
+                        <div className="flex-1 overflow-y-auto custom-scroll p-4 space-y-3">
+                            {filtered.map(s => (
                                 <div 
-                                    key={s.id} 
-                                    onClick={() => {setActiveSys(s); setNotes(s.notes || "");}} 
-                                    className={`group p-10 rounded-[3rem] cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[320px] shadow-sm hover:shadow-2xl ${isDone ? 'emerald-gradient text-white shadow-emerald-200' : 'bg-white border-4 border-slate-100 text-slate-800'}`}
+                                    key={s.id}
+                                    onClick={() => setActiveSys(s)}
+                                    className={`p-5 rounded-2xl cursor-pointer transition-all border-2 border-transparent ${activeSys?.id === s.id ? 'active-card shadow-md' : 'bg-white hover:border-slate-200'}`}
                                 >
-                                    <div className="flex justify-between items-start">
-                                        <span className="text-5xl font-black tracking-tighter">#{s.id}</span>
-                                        <div className={`p-4 rounded-2xl ${isDone ? 'bg-white/20' : 'bg-slate-50 text-slate-200'}`}>
-                                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d={isDone ? "M5 13l4 4L19 7" : "M12 8v4l3 3"} /></svg>
-                                        </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-lg font-bold">#{s.id}</span>
+                                        <div className={`h-2 w-2 rounded-full ${s.notes || s.has_attachment ? 'bg-emerald-500' : 'bg-slate-200'}`} />
                                     </div>
-                                    <div>
-                                        <p className={`text-xl font-bold leading-tight mb-4 ${isDone ? 'text-emerald-50' : 'text-slate-300'}`}>
-                                            {s.notes ? s.notes : "AWAITING DATA..."}
-                                        </p>
-                                        {s.has_attachment && <div className="text-[10px] font-black uppercase tracking-[0.3em] opacity-60">📷 MEDIA ATTACHED</div>}
-                                    </div>
+                                    <p className="text-xs text-slate-400 mt-1 truncate">{s.notes || "No notes"}</p>
                                 </div>
-                            );
-                        })}
-                    </main>
+                            ))}
+                            <button onClick={() => {
+                                const id = prompt("ID:");
+                                if(id) supabase.from('systems').insert([{id}]).then(loadData);
+                            }} className="w-full py-4 border-2 border-dashed border-slate-300 rounded-2xl text-slate-400 font-bold hover:bg-slate-100">+ Add Unit</button>
+                        </div>
+                    </aside>
 
-                    {/* GIANT MODAL EDITOR */}
-                    {activeSys && (
-                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-2xl flex items-center justify-center p-4 z-50">
-                            <div className="bg-white w-full max-w-4xl rounded-[4rem] p-12 shadow-2xl overflow-y-auto max-h-[95vh] animate-in zoom-in duration-300">
-                                <div className="flex justify-between items-center mb-12">
-                                    <h2 className="text-6xl font-black tracking-tighter italic text-slate-900">SYS_{activeSys.id}</h2>
-                                    <button onClick={() => setActiveSys(null)} className="text-slate-200 hover:text-red-500 transition-colors text-7xl font-light">&times;</button>
-                                </div>
-                                
-                                <div className="space-y-10">
+                    {/* MAIN AREA: CONTENT */}
+                    <main className="flex-1 flex flex-col bg-white overflow-y-auto custom-scroll">
+                        {activeSys ? (
+                            <div className="p-10 max-w-4xl mx-auto w-full space-y-10">
+                                <div className="flex justify-between items-end border-b pb-6">
                                     <div>
-                                        <label className="text-xs font-black text-slate-300 uppercase tracking-widest block mb-4 italic">// Diagnostic Input</label>
-                                        <textarea className="w-full h-64 bg-slate-50 rounded-[3rem] p-10 text-2xl font-bold text-slate-700 focus:ring-8 focus:ring-emerald-50 outline-none transition-all border-none" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ENTER UNIT STATUS..." />
+                                        <span className="text-xs font-black text-emerald-500 uppercase tracking-widest">Active System</span>
+                                        <h2 className="text-6xl font-black tracking-tighter">SYS_{activeSys.id}</h2>
                                     </div>
+                                    <button 
+                                        onClick={handleSave}
+                                        disabled={loading}
+                                        className="bg-emerald-500 text-white px-10 py-4 rounded-2xl font-black text-sm hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100"
+                                    >
+                                        {loading ? "SYNCING..." : "SAVE CHANGES"}
+                                    </button>
+                                </div>
 
-                                    <div>
-                                        <label className="text-xs font-black text-slate-300 uppercase tracking-widest block mb-4 italic">// Multiple Photo Capture</label>
-                                        <div className="bg-emerald-50 border-4 border-dashed border-emerald-100 rounded-[3rem] p-16 text-center relative group hover:bg-emerald-100 transition-all">
-                                            <p className="text-emerald-600 font-black text-xl">TAP TO UPLOAD EVIDENCE</p>
+                                <div className="space-y-4">
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Diagnostic Report</label>
+                                    <textarea 
+                                        className="w-full h-64 bg-slate-50 border-none rounded-[2rem] p-8 text-xl outline-none focus:ring-4 focus:ring-emerald-50"
+                                        value={notes}
+                                        onChange={(e) => setNotes(e.target.value)}
+                                        placeholder="Enter status details..."
+                                    />
+                                </div>
+
+                                <div className="space-y-4">
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Photo Gallery</label>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                        {photos.map((url, i) => (
+                                            <a key={i} href={url} target="_blank" className="aspect-square rounded-3xl overflow-hidden border-4 border-slate-50">
+                                                <img src={url} className="w-full h-full object-cover hover:scale-110 transition-transform cursor-pointer" />
+                                            </a>
+                                        ))}
+                                        <div className="aspect-square bg-slate-50 border-4 border-dashed border-slate-100 rounded-3xl flex items-center justify-center relative hover:bg-slate-100 transition-colors">
+                                            <span className="text-slate-300 font-bold text-center p-4">TAP TO ADD PHOTOS</span>
                                             <input type="file" id="file-upload" multiple className="absolute inset-0 opacity-0 cursor-pointer" />
                                         </div>
                                     </div>
-
-                                    <button disabled={loading} onClick={handleSave} className="w-full bg-emerald-500 text-white py-8 rounded-[3rem] font-black text-2xl uppercase tracking-[0.2em] shadow-2xl shadow-emerald-200 hover:scale-[1.02] active:scale-95 transition-all">
-                                        {loading ? "SYNCING CORE..." : "FINALIZE & SAVE"}
-                                    </button>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        ) : (
+                            <div className="h-full flex flex-col items-center justify-center text-slate-300">
+                                <svg className="w-20 h-20 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+                                <p className="font-bold uppercase tracking-widest">Select a unit to begin</p>
+                            </div>
+                        )}
+                    </main>
                 </div>
             );
         }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.render(<App />);
     </script>
 </body>
 </html>
