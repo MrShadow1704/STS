@@ -3,20 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universal QA App</title>
+    <title>QA System Manager</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .system-card:hover { transform: translateY(-2px); }
+    </style>
 </head>
-<body class="bg-slate-50">
+<body class="bg-gray-50 text-gray-900">
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // --- CONFIG ---
+        // --- DATABASE CONFIG ---
         const SB_URL = 'https://bbgcsddwzcrxwzczrojf.supabase.co';
         const SB_KEY = 'sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f';
         const supabase = window.supabase.createClient(SB_URL, SB_KEY);
@@ -25,6 +30,7 @@
             const [systems, setSystems] = useState([]);
             const [activeSys, setActiveSys] = useState(null);
             const [notes, setNotes] = useState("");
+            const [loading, setLoading] = useState(false);
 
             useEffect(() => { loadData(); }, []);
 
@@ -34,54 +40,129 @@
             };
 
             const handleSave = async () => {
-                await supabase.from('systems').update({ notes }).eq('id', activeSys.id);
+                setLoading(true);
+                const file = document.getElementById('file-upload')?.files[0];
+                let hasAttach = activeSys.has_attachment;
+
+                if (file) {
+                    await supabase.storage.from('photos').upload(`${activeSys.id}.jpg`, file, { upsert: true });
+                    hasAttach = true;
+                }
+
+                await supabase.from('systems').update({ notes, has_attachment: hasAttach }).eq('id', activeSys.id);
+                
+                setLoading(false);
+                setActiveSys(null);
+                loadData();
+            };
+
+            const deleteSystem = async (id) => {
+                if (!confirm("Delete this system?")) return;
+                await supabase.from('systems').delete().eq('id', id);
                 setActiveSys(null);
                 loadData();
             };
 
             return (
-                <div className="min-h-screen p-4 md:p-8">
-                    <header className="flex justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm">
-                        <h1 className="text-2xl font-bold text-slate-800">QA Dashboard</h1>
-                        <button 
-                            onClick={() => {
-                                const id = prompt("New System ID:");
-                                if(id) supabase.from('systems').insert([{id}]).then(loadData);
-                            }}
-                            className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold"
-                        >
-                            + Add System
-                        </button>
-                    </header>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {systems.map(s => (
-                            <div 
-                                key={s.id}
-                                onClick={() => { setActiveSys(s); setNotes(s.notes || ""); }}
-                                className="bg-white p-6 rounded-2xl border border-slate-200 hover:border-blue-500 cursor-pointer transition-all shadow-sm"
+                <div className="min-h-screen">
+                    {/* NAVBAR */}
+                    <nav className="bg-white border-b px-6 py-4 sticky top-0 z-10 shadow-sm">
+                        <div className="max-w-6xl mx-auto flex justify-between items-center">
+                            <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                                <div className="w-2 h-6 bg-blue-600 rounded-full"></div>
+                                QA Navigator
+                            </h1>
+                            <button 
+                                onClick={() => {
+                                    const id = prompt("Enter System Number:");
+                                    if(id) supabase.from('systems').insert([{id}]).then(loadData);
+                                }}
+                                className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors"
                             >
-                                <div className="flex justify-between items-center mb-2">
-                                    <span className="text-2xl font-black">#{s.id}</span>
-                                    <div className={`h-3 w-3 rounded-full ${s.notes ? 'bg-green-500' : 'bg-slate-200'}`} />
-                                </div>
-                                <p className="text-slate-500 text-sm truncate">{s.notes || "No data"}</p>
-                            </div>
-                        ))}
-                    </div>
+                                + Add Unit
+                            </button>
+                        </div>
+                    </nav>
 
+                    {/* MAIN GRID */}
+                    <main className="max-w-6xl mx-auto p-6 md:p-10">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {systems.map(s => (
+                                <div 
+                                    key={s.id}
+                                    onClick={() => { setActiveSys(s); setNotes(s.notes || ""); }}
+                                    className="system-card bg-white p-6 rounded-2xl border border-gray-200 shadow-sm transition-all cursor-pointer flex flex-col justify-between"
+                                >
+                                    <div>
+                                        <div className="flex justify-between items-start mb-4">
+                                            <span className="bg-gray-100 text-gray-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                                                ID {s.id}
+                                            </span>
+                                            <div className={`h-2 w-2 rounded-full ${s.notes || s.has_attachment ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-gray-200'}`} />
+                                        </div>
+                                        <p className="text-gray-500 text-sm leading-relaxed line-clamp-3">
+                                            {s.notes || "Awaiting testing diagnostics..."}
+                                        </p>
+                                    </div>
+                                    {s.has_attachment && (
+                                        <div className="mt-4 pt-4 border-t border-gray-50 text-[10px] font-bold text-blue-500 uppercase flex items-center gap-1">
+                                            📎 Image Linked
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </main>
+
+                    {/* EDIT MODAL */}
                     {activeSys && (
-                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                            <div className="bg-white w-full max-w-lg rounded-3xl p-8 shadow-2xl">
-                                <h2 className="text-3xl font-bold mb-6 text-slate-800">System #{activeSys.id}</h2>
-                                <textarea 
-                                    className="w-full h-40 border border-slate-200 rounded-2xl p-4 mb-6 focus:ring-2 focus:ring-blue-500 outline-none"
-                                    value={notes}
-                                    onChange={(e) => setNotes(e.target.value)}
-                                />
-                                <div className="flex gap-4">
-                                    <button onClick={handleSave} className="flex-1 bg-blue-600 text-white py-4 rounded-xl font-bold">Save Update</button>
-                                    <button onClick={() => setActiveSys(null)} className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-xl font-bold">Cancel</button>
+                        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                                <div className="p-8">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h2 className="text-2xl font-bold">System {activeSys.id}</h2>
+                                        <button onClick={() => setActiveSys(null)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+                                    </div>
+                                    
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-2">Findings</label>
+                                    <textarea 
+                                        className="w-full h-36 border border-gray-200 rounded-xl p-4 mb-6 focus:ring-2 focus:ring-blue-500 outline-none transition-all text-gray-700"
+                                        value={notes}
+                                        onChange={(e) => setNotes(e.target.value)}
+                                        placeholder="Type test results here..."
+                                    />
+
+                                    <div className="mb-6">
+                                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-2">Evidence</label>
+                                        <div className="flex flex-col gap-3">
+                                            {activeSys.has_attachment && (
+                                                <a 
+                                                    href={`${SB_URL}/storage/v1/object/public/photos/${activeSys.id}.jpg`} 
+                                                    target="_blank" 
+                                                    className="text-xs text-blue-600 font-bold underline"
+                                                >
+                                                    View Current Attachment
+                                                </a>
+                                            )}
+                                            <input type="file" id="file-upload" className="text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-3 pt-4">
+                                        <button 
+                                            disabled={loading}
+                                            onClick={handleSave} 
+                                            className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all disabled:opacity-50"
+                                        >
+                                            {loading ? "Saving..." : "Save Changes"}
+                                        </button>
+                                        <button 
+                                            onClick={() => deleteSystem(activeSys.id)}
+                                            className="px-6 py-3 rounded-xl font-bold text-red-500 border border-red-100 hover:bg-red-50 transition-all"
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
