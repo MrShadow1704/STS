@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <title>Simple Live Notepad</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
 </head>
 <body class="bg-gray-100 p-4 md:p-10">
+
+    <div id="status-msg" class="text-center p-2 bg-yellow-100 text-yellow-800 font-bold mb-4">Connecting to Database...</div>
 
     <div class="max-w-4xl mx-auto bg-white shadow-lg rounded-lg overflow-hidden flex flex-col md:flex-row h-[80vh]">
         
@@ -14,53 +16,67 @@
             <div class="p-4 bg-gray-800 text-white">
                 <input type="text" id="search" placeholder="Search system #..." class="w-full p-2 rounded text-black">
             </div>
-            <div id="list" class="overflow-y-auto flex-1"></div>
+            <div id="list" class="overflow-y-auto flex-1 text-center py-10 text-gray-400">
+                Waiting for data...
+            </div>
         </div>
 
         <div id="editor" class="w-full md:w-2/3 p-6 hidden">
             <h2 class="text-2xl font-bold mb-4 text-blue-600">System #<span id="sys-id"></span></h2>
+            <textarea id="notes-text" class="w-full p-3 border rounded mb-4 h-40" placeholder="Write result here..."></textarea>
             
-            <label class="block mb-2 font-bold">Notes:</label>
-            <textarea id="notes-text" class="w-full p-3 border rounded mb-4 h-32" placeholder="Write result here..."></textarea>
-            
-            <label class="block mb-2 font-bold">Photo Evidence:</label>
-            <input type="file" id="file-input" class="mb-4 block w-full text-sm">
-            
-            <div id="download-area" class="mb-6 p-3 bg-green-50 rounded hidden border border-green-200">
-                <p class="text-green-700 text-sm font-bold">✓ Attachment Available:</p>
-                <a id="download-link" href="#" target="_blank" class="text-blue-600 underline font-medium">Click to Download/View Photo</a>
+            <div id="download-area" class="mb-4 p-3 bg-green-50 rounded hidden border border-green-200">
+                <a id="download-link" href="#" target="_blank" class="text-blue-600 underline font-bold">View/Download Attached Photo</a>
             </div>
 
-            <button id="save-btn" class="w-full bg-blue-600 text-white p-3 rounded font-bold hover:bg-blue-700">Save Update</button>
+            <input type="file" id="file-input" class="mb-4 block w-full text-sm">
+            <button id="save-btn" class="w-full bg-blue-600 text-white p-4 rounded font-bold hover:bg-blue-700">SAVE & SYNC</button>
         </div>
 
         <div id="empty" class="w-full md:w-2/3 flex items-center justify-center text-gray-400">
-            Select a system to view results
+            Select a system from the left
         </div>
     </div>
 
     <script>
-        // PASTE YOUR KEYS HERE
-        const SB_URL = 'https://bbgcsddwzcrxwzczrojf.supabase.co';
-        const SB_KEY = 'sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f';
-        const supabase = supabase.createClient(SB_URL, SB_KEY);
+        // 1. UPDATE THESE CAREFULLY
+        const SB_URL = 'YOUR_SUPABASE_URL_HERE';
+        const SB_KEY = 'YOUR_SUPABASE_ANON_KEY_HERE';
+        
+        // Use the window.supabase prefix to ensure it finds the library
+        const supabase = window.supabase.createClient(SB_URL, SB_KEY);
 
         let activeId = null;
 
         async function load() {
-            const { data } = await supabase.from('systems').select('*').order('id');
-            const term = document.getElementById('search').value;
-            const list = document.getElementById('list');
-            list.innerHTML = '';
+            try {
+                const { data, error } = await supabase.from('systems').select('*').order('id');
+                
+                if (error) throw error;
 
-            data.filter(s => s.id.includes(term)).forEach(s => {
-                const isDone = s.notes || s.has_attachment;
-                const div = document.createElement('div');
-                div.className = `p-4 border-b cursor-pointer flex justify-between ${activeId === s.id ? 'bg-blue-100' : ''}`;
-                div.innerHTML = `<span>#${s.id}</span> <span class="w-3 h-3 rounded-full ${isDone ? 'bg-green-500' : 'bg-red-500'}"></span>`;
-                div.onclick = () => { activeId = s.id; show(s); };
-                list.appendChild(div);
-            });
+                document.getElementById('status-msg').innerText = "✅ Live Sync Active";
+                document.getElementById('status-msg').className = "text-center p-2 bg-green-100 text-green-800 font-bold mb-4";
+
+                const term = document.getElementById('search').value;
+                const list = document.getElementById('list');
+                list.innerHTML = '';
+
+                data.filter(s => s.id.includes(term)).forEach(s => {
+                    const isDone = s.notes || s.has_attachment;
+                    const div = document.createElement('div');
+                    div.className = `p-4 border-b cursor-pointer flex justify-between items-center hover:bg-gray-50 ${activeId === s.id ? 'bg-blue-100 border-l-4 border-blue-500' : ''}`;
+                    div.innerHTML = `
+                        <span class="font-bold">#${s.id}</span> 
+                        <span class="w-4 h-4 rounded-full ${isDone ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}"></span>
+                    `;
+                    div.onclick = () => { activeId = s.id; show(s); };
+                    list.appendChild(div);
+                });
+            } catch (err) {
+                document.getElementById('status-msg').innerText = "❌ Connection Error: " + err.message;
+                document.getElementById('status-msg').className = "text-center p-2 bg-red-100 text-red-800 font-bold mb-4";
+                console.error(err);
+            }
         }
 
         function show(s) {
@@ -72,16 +88,24 @@
             const dl = document.getElementById('download-area');
             if (s.has_attachment) {
                 dl.classList.remove('hidden');
-                // This assumes your image is named system_id.jpg in the 'photos' bucket
                 document.getElementById('download-link').href = `${SB_URL}/storage/v1/object/public/photos/${s.id}.jpg`;
             } else {
                 dl.classList.add('hidden');
             }
+            load(); // Refresh highlights
         }
 
         document.getElementById('save-btn').onclick = async () => {
+            const btn = document.getElementById('save-btn');
+            btn.innerText = "SAVING...";
+            btn.disabled = true;
+
             const file = document.getElementById('file-input').files[0];
-            let has_attachment = activeId ? (await supabase.from('systems').select('has_attachment').eq('id', activeId).single()).data.has_attachment : false;
+            let has_attachment = false;
+
+            // Check if it already has one
+            const current = await supabase.from('systems').select('has_attachment').eq('id', activeId).single();
+            has_attachment = current.data?.has_attachment || false;
 
             if (file) {
                 await supabase.storage.from('photos').upload(`${activeId}.jpg`, file, { upsert: true });
@@ -93,14 +117,15 @@
                 has_attachment: has_attachment
             }).eq('id', activeId);
 
-            alert("Saved!");
+            btn.innerText = "SAVE & SYNC";
+            btn.disabled = false;
             load();
         };
 
         document.getElementById('search').oninput = load;
+        
+        // Initial load
         load();
-        // Live sync
-        supabase.channel('room1').on('postgres_changes', {event:'*', schema:'public', table:'systems'}, load).subscribe();
     </script>
 </body>
 </html>
