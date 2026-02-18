@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -12,7 +12,7 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
 <style>
-body { font-family: Inter, sans-serif; background:#0f172a; color:#e5e7eb; }
+body { font-family: Inter, sans-serif; background:#f8fafc; }
 </style>
 </head>
 
@@ -20,6 +20,7 @@ body { font-family: Inter, sans-serif; background:#0f172a; color:#e5e7eb; }
 <div id="root"></div>
 
 <script type="text/babel">
+
 const { useState, useEffect } = React;
 
 const SB_URL = "https://bbgcsddwzcrxwzczrojf.supabase.co";
@@ -27,6 +28,7 @@ const SB_KEY = "sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f";
 const supabase = window.supabase.createClient(SB_URL, SB_KEY);
 
 function App(){
+
 const [systems,setSystems] = useState([]);
 const [active,setActive] = useState(null);
 const [notes,setNotes] = useState("");
@@ -40,82 +42,79 @@ const [loading,setLoading] = useState(false);
 useEffect(()=>{ loadSystems(); },[]);
 
 async function loadSystems(){
-  const {data,error} = await supabase
+  const { data, error } = await supabase
     .from("systems")
     .select("*")
-    .order("id");
+    .order("id",{ ascending:true });
 
-  if(error) console.error(error);
+  if(error){ console.error(error); return; }
   setSystems(data || []);
 }
 
 /* OPEN SYSTEM */
-function openSystem(id){
-  const fresh = systems.find(s=>s.id===id);
-  setActive(fresh);
-}
-
-/* ACTIVE EFFECT */
 useEffect(()=>{
-  if(active){
-    setNotes(active.notes || "");
-    setStatus(active.status || "not_completed");
-    fetchPhotos(active.id);
-  } else {
-    setPhotos([]);
-  }
+  if(!active) return;
+
+  setNotes(active.notes || "");
+  setStatus(active.status || "not_completed");
+  loadPhotos(active.id);
 },[active]);
 
-/* FETCH PHOTOS */
-async function fetchPhotos(id){
-  const {data,error} = await supabase.storage.from("photos").list(id);
-  if(error || !data){ setPhotos([]); return; }
+/* LOAD PHOTOS */
+async function loadPhotos(systemId){
+  const { data } = await supabase
+    .storage
+    .from("photos")
+    .list(systemId);
 
-  const urls = data.map(f=>{
-    const {data:{publicUrl}} =
+  if(!data){ setPhotos([]); return; }
+
+  const urls = data.map(file=>{
+    const { data:{ publicUrl }} =
       supabase.storage.from("photos")
-        .getPublicUrl(`${id}/${f.name}`);
-    return publicUrl + `?t=${Date.now()}`;
+      .getPublicUrl(`${systemId}/${file.name}`);
+    return publicUrl;
   });
 
   setPhotos(urls);
 }
 
-/* DELETE PHOTO */
-async function deletePhoto(url){
-  const path = url.split("/photos/")[1].split("?")[0];
-  await supabase.storage.from("photos").remove([path]);
-  fetchPhotos(active.id);
-}
-
 /* SAVE SYSTEM */
 async function handleSave(){
+  if(!active) return;
   setLoading(true);
 
+  /* UPLOAD PHOTOS */
   const input = document.getElementById("file-upload");
-  const files = input.files;
-
-  let hasPhotos = photos.length > 0;
-
-  if(files && files.length){
-    for(let f of files){
-      const path = `${active.id}/${Date.now()}_${f.name}`;
-      await supabase.storage.from("photos").upload(path,f,{upsert:true});
-      hasPhotos = true;
+  if(input.files.length){
+    for(const file of input.files){
+      const path = `${active.id}/${Date.now()}_${file.name}`;
+      await supabase.storage
+        .from("photos")
+        .upload(path,file,{ upsert:true });
     }
   }
 
-  const newStatus =
-    notes.trim() || hasPhotos ? "completed" : "not_completed";
+  /* AUTO GREEN IF ANY DATA */
+  const finalStatus =
+    notes.trim() || input.files.length
+    ? "completed"
+    : status;
 
-  await supabase.from("systems")
-    .update({ notes, status:newStatus })
+  const { error } = await supabase
+    .from("systems")
+    .update({
+      notes,
+      status: finalStatus
+    })
     .eq("id",active.id);
+
+  if(error){ alert(error.message); }
 
   input.value="";
   await loadSystems();
-  await fetchPhotos(active.id);
-  setStatus(newStatus);
+  await loadPhotos(active.id);
+  setStatus(finalStatus);
   setLoading(false);
 }
 
@@ -124,15 +123,29 @@ async function addSystem(){
   const id = prompt("Enter System Number");
   if(!id) return;
 
-  const {error} = await supabase.from("systems")
-    .insert([{ id:id.trim(), notes:"", status:"not_completed" }]);
+  const cleanId = id.trim();
+
+  const { error } = await supabase
+    .from("systems")
+    .insert([{
+      id: cleanId,
+      notes:"",
+      status:"not_completed"
+    }]);
 
   if(error){
-    alert("System already exists");
+    alert(error.message);
     return;
   }
 
   loadSystems();
+}
+
+/* DELETE PHOTO */
+async function deletePhoto(url){
+  const path = url.split("/photos/")[1].split("?")[0];
+  await supabase.storage.from("photos").remove([path]);
+  loadPhotos(active.id);
 }
 
 /* FILTER */
@@ -145,33 +158,34 @@ return(
 <div className="flex h-screen">
 
 {/* SIDEBAR */}
-<div className="w-64 bg-slate-950 border-r border-slate-800 p-4 space-y-4">
-<h1 className="text-xl font-bold text-emerald-400">STS QAQC</h1>
+<div className="w-64 bg-white border-r p-4">
+<h1 className="text-xl font-bold text-blue-600 mb-4">STS QAQC</h1>
 
-<button onClick={addSystem}
-className="w-full bg-emerald-600 py-2 rounded-lg font-semibold">
+<button
+onClick={addSystem}
+className="w-full bg-blue-600 text-white py-2 rounded mb-4">
 + Add System
 </button>
 
 <div className="space-y-2 text-sm">
-<Btn label="📁 All Systems" onClick={()=>setFilter("all")}/>
-<Btn label="✅ Completed" onClick={()=>setFilter("completed")}/>
-<Btn label="❌ Not Completed" onClick={()=>setFilter("not_completed")}/>
+<button onClick={()=>setFilter("all")} className="w-full text-left p-2 hover:bg-gray-100 rounded">📁 All</button>
+<button onClick={()=>setFilter("completed")} className="w-full text-left p-2 hover:bg-gray-100 rounded">✅ Completed</button>
+<button onClick={()=>setFilter("not_completed")} className="w-full text-left p-2 hover:bg-gray-100 rounded">❌ Not Completed</button>
 </div>
 </div>
 
 {/* MAIN */}
 <div className="flex-1 p-6 overflow-y-auto">
 
-<div className="flex gap-4 mb-6">
+<div className="flex gap-4 mb-4">
 <input
-placeholder="Search system number..."
-className="flex-1 bg-slate-800 p-3 rounded-lg"
+className="flex-1 border p-3 rounded"
+placeholder="Search system..."
 onChange={e=>setSearch(e.target.value)}
 />
 
 <select
-className="bg-slate-800 p-3 rounded-lg"
+className="border p-3 rounded"
 onChange={e=>setFilter(e.target.value)}>
 <option value="all">All</option>
 <option value="completed">Completed</option>
@@ -181,15 +195,18 @@ onChange={e=>setFilter(e.target.value)}>
 
 <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4">
 {filtered.map(s=>(
-<div key={s.id}
-onClick={()=>openSystem(s.id)}
-className={`cursor-pointer p-4 rounded-xl border
+<div
+key={s.id}
+onClick={()=>setActive(s)}
+className={`cursor-pointer border rounded-lg p-4
 ${s.status==="completed"
-?"border-emerald-500 bg-emerald-500/10"
-:"border-red-500 bg-red-500/10"}`}>
+?"border-green-500 bg-green-50"
+:"border-red-400 bg-red-50"}`}>
 <div className="font-bold">System #{s.id}</div>
-<div className={`text-sm mt-2`}>
-{s.status==="completed"?"🟢 Completed":"🔴 Not Completed"}
+<div className="text-sm mt-2">
+{s.status==="completed"
+?"🟢 Completed"
+:"🔴 Not Completed"}
 </div>
 </div>
 ))}
@@ -198,19 +215,19 @@ ${s.status==="completed"
 
 {/* MODAL */}
 {active && (
-<div className="fixed inset-0 bg-black/70 flex items-center justify-center">
-<div className="bg-slate-900 w-full max-w-2xl rounded-xl p-6 space-y-4">
+<div className="fixed inset-0 bg-black/40 flex items-center justify-center">
+<div className="bg-white w-full max-w-2xl rounded-lg p-6 space-y-4">
 
-<h2 className="text-2xl font-bold">System #{active.id}</h2>
+<h2 className="text-xl font-bold">System #{active.id}</h2>
 
 <textarea
 value={notes}
 onChange={e=>setNotes(e.target.value)}
-placeholder="Notes..."
-className="w-full p-3 bg-slate-800 rounded-lg h-32"
+placeholder="Enter notes..."
+className="w-full border p-3 rounded h-28"
 />
 
-<input id="file-upload" type="file" multiple accept="image/*"/>
+<input id="file-upload" type="file" multiple accept="image/*" />
 
 <div className="grid grid-cols-3 gap-3">
 {photos.map((url,i)=>(
@@ -218,7 +235,7 @@ className="w-full p-3 bg-slate-800 rounded-lg h-32"
 <img src={url} className="h-24 w-full object-cover rounded"/>
 <button
 onClick={()=>deletePhoto(url)}
-className="absolute top-1 right-1 bg-red-600 px-2 text-xs rounded">
+className="absolute top-1 right-1 bg-red-600 text-white text-xs px-2 rounded">
 ✕
 </button>
 </div>
@@ -226,13 +243,11 @@ className="absolute top-1 right-1 bg-red-600 px-2 text-xs rounded">
 </div>
 
 <div className="flex justify-end gap-3">
-<button onClick={()=>setActive(null)}
-className="px-4 py-2 bg-slate-700 rounded-lg">
+<button onClick={()=>setActive(null)} className="px-4 py-2 border rounded">
 Close
 </button>
-
 <button onClick={handleSave}
-className="px-6 py-2 bg-emerald-600 rounded-lg">
+className="px-6 py-2 bg-blue-600 text-white rounded">
 {loading?"Saving...":"Save"}
 </button>
 </div>
@@ -245,16 +260,8 @@ className="px-6 py-2 bg-emerald-600 rounded-lg">
 );
 }
 
-function Btn({label,onClick}){
-return(
-<button onClick={onClick}
-className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800">
-{label}
-</button>
-);
-}
-
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+
 </script>
 </body>
 </html>
