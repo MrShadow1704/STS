@@ -12,13 +12,7 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
 <style>
-body { font-family: Inter, sans-serif; background:#0f172a; color:#e2e8f0; }
-.success-flash { animation: flash .8s ease; }
-@keyframes flash {
-0%{background:#022c22;}
-50%{background:#065f46;}
-100%{background:#0f172a;}
-}
+body { font-family: Inter, sans-serif; background:#0f172a; color:#e5e7eb; }
 </style>
 </head>
 
@@ -35,243 +29,229 @@ const supabase = window.supabase.createClient(SB_URL, SB_KEY);
 
 function App(){
 
-const [systems,setSystems]=useState([]);
-const [active,setActive]=useState(null);
-const [notes,setNotes]=useState("");
-const [photos,setPhotos]=useState([]);
-const [loading,setLoading]=useState(false);
-const [flash,setFlash]=useState(false);
-const [search,setSearch]=useState("");
+const [systems,setSystems] = useState([]);
+const [active,setActive] = useState(null);
+const [notes,setNotes] = useState("");
+const [photos,setPhotos] = useState([]);
+const [status,setStatus] = useState("not_completed");
+const [search,setSearch] = useState("");
+const [filter,setFilter] = useState("all");
+const [loading,setLoading] = useState(false);
 
-useEffect(()=>{loadSystems()},[]);
+/* LOAD SYSTEMS */
+useEffect(()=>{ loadSystems(); },[]);
 
 async function loadSystems(){
-const {data,error}=await supabase.from("systems").select("*").order("id");
-if(error) console.error(error);
-setSystems(data||[]);
+  const {data} = await supabase.from("systems").select("*").order("id");
+  setSystems(data || []);
 }
 
+/* ACTIVE SYSTEM */
 useEffect(()=>{
-if(active){
-setNotes(active.notes||"");
-fetchPhotos(active.id);
-}else{
-setPhotos([]);
-}
+  if(active){
+    setNotes(active.notes || "");
+    setStatus(active.status || "not_completed");
+    fetchPhotos(active.id);
+  } else {
+    setPhotos([]);
+  }
 },[active]);
 
 /* FETCH PHOTOS */
 async function fetchPhotos(id){
+  const {data} = await supabase.storage.from("photos").list(id);
+  if(!data){ setPhotos([]); return; }
 
-const {data,error}=await supabase.storage
-.from("photos")
-.list(id);
+  const urls = data.map(f=>{
+    const {data:{publicUrl}} =
+      supabase.storage.from("photos").getPublicUrl(`${id}/${f.name}`);
+    return publicUrl;
+  });
 
-if(error){
-console.error("List error:",error);
-setPhotos([]);
-return;
+  setPhotos(urls);
 }
 
-if(!data || data.length===0){
-setPhotos([]);
-return;
-}
-
-const urls=data.map(file=>{
-const {data:{publicUrl}}=
-supabase.storage.from("photos")
-.getPublicUrl(`${id}/${file.name}`);
-return publicUrl + `?t=${Date.now()}`;
-});
-
-setPhotos(urls);
+/* DELETE PHOTO */
+async function deletePhoto(url){
+  const path = url.split("/photos/")[1].split("?")[0];
+  await supabase.storage.from("photos").remove([path]);
+  fetchPhotos(active.id);
 }
 
 /* SAVE */
 async function handleSave(){
+  setLoading(true);
 
-if(!active) return;
-setLoading(true);
+  const input = document.getElementById("file-upload");
+  const files = input?.files;
 
-const input=document.getElementById("file-upload");
-const files=input?.files;
+  if(files && files.length){
+    for(let f of files){
+      const path = `${active.id}/${Date.now()}_${f.name}`;
+      await supabase.storage.from("photos").upload(path,f,{upsert:true});
+    }
+  }
 
-let hasAttach = active.has_attachment || false;
+  await supabase.from("systems")
+    .update({ notes, status })
+    .eq("id",active.id);
 
-if(files && files.length>0){
-
-for(let i=0;i<files.length;i++){
-
-const path=`${active.id}/${Date.now()}_${files[i].name}`;
-
-const {error}=await supabase.storage
-.from("photos")
-.upload(path,files[i],{upsert:true});
-
-if(error){
-console.error("Upload error:",error);
-}else{
-hasAttach=true;
-}
-}
-}
-
-const {error:updateError}=await supabase
-.from("systems")
-.update({notes,has_attachment:hasAttach})
-.eq("id",active.id);
-
-if(updateError) console.error(updateError);
-
-await fetchPhotos(active.id);
-await loadSystems();
-
-if(input) input.value="";
-
-setFlash(true);
-setTimeout(()=>setFlash(false),800);
-
-setLoading(false);
+  input.value="";
+  await fetchPhotos(active.id);
+  await loadSystems();
+  setLoading(false);
 }
 
 /* ADD SYSTEM */
 async function addSystem(){
-const id=prompt("Enter System ID:");
-if(!id) return;
+  const id = prompt("Enter System Number");
+  if(!id) return;
 
-const {error}=await supabase
-.from("systems")
-.insert([{id,notes:"",has_attachment:false}]);
+  await supabase.from("systems")
+    .insert([{ id, notes:"", status:"not_completed" }]);
 
-if(error) alert("ID already exists");
-else loadSystems();
+  loadSystems();
 }
 
-/* DELETE SYSTEM */
-async function deleteSystem(){
-if(!confirm("Delete this system?")) return;
-await supabase.from("systems").delete().eq("id",active.id);
-setActive(null);
-loadSystems();
-}
+/* FILTERED SYSTEMS */
+const filtered = systems.filter(s =>
+  s.id.toLowerCase().includes(search.toLowerCase()) &&
+  (filter==="all" || s.status===filter)
+);
 
 return(
-<div className={`flex h-screen ${flash?"success-flash":""}`}>
+<div className="flex h-screen">
 
 {/* SIDEBAR */}
-<div className="w-72 bg-slate-950 border-r border-slate-800 flex flex-col">
+<div className="w-64 bg-slate-950 border-r border-slate-800 p-4 space-y-4">
 
-<div className="p-6 border-b border-slate-800">
-<h1 className="text-2xl font-bold text-emerald-400">
-STS QAQC
-</h1>
-<p className="text-xs text-slate-500">Quality Dashboard</p>
-</div>
+<h1 className="text-xl font-bold text-emerald-400">STS QAQC</h1>
 
-<div className="p-4 space-y-3">
 <button onClick={addSystem}
-className="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg text-sm font-semibold transition">
+className="w-full bg-emerald-600 py-2 rounded-lg font-semibold">
 + Add System
 </button>
 
-<input
-placeholder="Search..."
-className="w-full bg-slate-800 p-2 rounded-lg text-sm outline-none"
-onChange={e=>setSearch(e.target.value)}
-/>
+<div className="space-y-2 text-sm">
+  <Btn label="📊 Dashboard"/>
+  <Btn label="📁 All Systems" onClick={()=>setFilter("all")}/>
+  <Btn label="✅ Completed" onClick={()=>setFilter("completed")}/>
+  <Btn label="❌ Not Completed" onClick={()=>setFilter("not_completed")}/>
+  <Btn label="⚙ Settings"/>
 </div>
 
-<div className="flex-1 overflow-y-auto px-3 space-y-2 pb-4">
-{systems
-.filter(s=>s.id.toLowerCase().includes(search.toLowerCase()))
-.map(s=>(
-<div key={s.id}
-onClick={()=>setActive(s)}
-className={`p-3 rounded-lg cursor-pointer transition flex justify-between items-center
-${active?.id===s.id?"bg-emerald-600/20 border border-emerald-500":"bg-slate-800 hover:bg-slate-700"}`}>
-
-<span>#{s.id}</span>
-
-{s.has_attachment &&
-<span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>}
-
-</div>
-))}
-</div>
 </div>
 
 {/* MAIN */}
-<div className="flex-1 p-10 overflow-y-auto">
+<div className="flex-1 p-6 overflow-y-auto">
 
-{active?(
-<div className="max-w-4xl mx-auto space-y-8">
-
-<div className="flex justify-between items-center">
-<h2 className="text-3xl font-bold">
-System #{active.id}
-</h2>
-
-<div className="flex gap-3">
-<button onClick={deleteSystem}
-className="bg-red-500/20 text-red-400 px-4 py-2 rounded-lg text-sm">
-Delete
-</button>
-
-<button onClick={handleSave}
-className="bg-emerald-600 hover:bg-emerald-500 px-6 py-2 rounded-lg text-sm font-semibold transition">
-{loading?"Saving...":"Save"}
-</button>
-</div>
-</div>
-
-<div>
-<label className="text-sm text-slate-400">Inspection Notes</label>
-<textarea
-value={notes}
-onChange={e=>setNotes(e.target.value)}
-className="w-full mt-2 p-4 rounded-xl bg-slate-800 h-40 outline-none focus:ring-2 focus:ring-emerald-500"
+{/* TOP BAR */}
+<div className="flex gap-4 mb-6">
+<input
+  placeholder="Search system number..."
+  className="flex-1 bg-slate-800 p-3 rounded-lg outline-none"
+  onChange={e=>setSearch(e.target.value)}
 />
+
+<select
+  className="bg-slate-800 p-3 rounded-lg"
+  onChange={e=>setFilter(e.target.value)}>
+  <option value="all">All</option>
+  <option value="completed">Completed</option>
+  <option value="not_completed">Not Completed</option>
+</select>
 </div>
 
-<div>
-<div className="flex justify-between items-center mb-3">
-<label className="text-sm text-slate-400">
-Attachments ({photos.length})
-</label>
-
-<div className="relative">
-<span className="text-emerald-400 text-sm cursor-pointer">
-+ Upload
-</span>
-<input type="file"
-id="file-upload"
-multiple
-className="absolute inset-0 opacity-0 cursor-pointer"/>
+{/* SYSTEM CARDS */}
+<div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4">
+{filtered.map(s=>(
+<div key={s.id}
+onClick={()=>setActive(s)}
+className={`cursor-pointer p-4 rounded-xl border
+${s.status==="completed"
+  ? "border-emerald-500 bg-emerald-500/10"
+  : "border-red-500 bg-red-500/10"}`}>
+<div className="font-bold">System #{s.id}</div>
+<div className={`text-sm mt-2
+${s.status==="completed"?"text-emerald-400":"text-red-400"}`}>
+{s.status==="completed"?"🟢 Completed":"🔴 Not Completed"}
 </div>
-</div>
-
-<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-{photos.map((url,i)=>(
-<div key={i}
-className="rounded-lg overflow-hidden bg-slate-800">
-<img src={url}
-className="w-full h-32 object-cover"/>
 </div>
 ))}
 </div>
+
+</div>
+
+{/* MODAL */}
+{active && (
+<div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+<div className="bg-slate-900 w-full max-w-2xl rounded-xl p-6 space-y-4">
+
+<h2 className="text-2xl font-bold">System #{active.id}</h2>
+
+<select
+value={status}
+onChange={e=>setStatus(e.target.value)}
+className={`w-full p-3 rounded-lg
+${status==="completed"?"bg-emerald-600":"bg-red-600"}`}>
+<option value="completed">Completed</option>
+<option value="not_completed">Not Completed</option>
+</select>
+
+<textarea
+value={notes}
+onChange={e=>setNotes(e.target.value)}
+placeholder="Notes..."
+className="w-full p-3 bg-slate-800 rounded-lg h-32"
+/>
+
+<input
+id="file-upload"
+type="file"
+multiple
+accept="image/*"
+capture="environment"
+/>
+
+<div className="grid grid-cols-3 gap-3">
+{photos.map((url,i)=>(
+<div key={i} className="relative">
+<img src={url} className="h-24 w-full object-cover rounded"/>
+<button
+onClick={()=>deletePhoto(url)}
+className="absolute top-1 right-1 bg-red-600 text-xs px-2 rounded">
+✕
+</button>
+</div>
+))}
+</div>
+
+<div className="flex justify-end gap-3">
+<button onClick={()=>setActive(null)}
+className="px-4 py-2 bg-slate-700 rounded-lg">
+Close
+</button>
+
+<button onClick={handleSave}
+className="px-6 py-2 bg-emerald-600 rounded-lg">
+{loading?"Saving...":"Save"}
+</button>
 </div>
 
 </div>
-):(
-<div className="h-full flex items-center justify-center text-slate-600">
-Select a system to begin
 </div>
 )}
 
 </div>
+);
+}
 
-</div>
+function Btn({label,onClick}){
+return(
+<button onClick={onClick}
+className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800">
+{label}
+</button>
 );
 }
 
