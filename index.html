@@ -47,14 +47,38 @@ async function loadSystems(){
     .select("*")
     .order("id",{ ascending:true });
 
-  if(error){ console.error(error); return; }
+  if(error) console.error(error);
   setSystems(data || []);
 }
+
+/* REALTIME SUBSCRIPTION */
+useEffect(()=>{
+  const channel = supabase
+    .channel("systems-realtime")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "systems" },
+      payload => {
+        console.log("Realtime update", payload);
+        loadSystems();
+
+        if(active && payload.new?.id === active.id){
+          setActive(payload.new);
+          setNotes(payload.new.notes || "");
+          setStatus(payload.new.status || "not_completed");
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [active]);
 
 /* OPEN SYSTEM */
 useEffect(()=>{
   if(!active) return;
-
   setNotes(active.notes || "");
   setStatus(active.status || "not_completed");
   loadPhotos(active.id);
@@ -84,8 +108,8 @@ async function handleSave(){
   if(!active) return;
   setLoading(true);
 
-  /* UPLOAD PHOTOS */
   const input = document.getElementById("file-upload");
+
   if(input.files.length){
     for(const file of input.files){
       const path = `${active.id}/${Date.now()}_${file.name}`;
@@ -95,7 +119,6 @@ async function handleSave(){
     }
   }
 
-  /* AUTO GREEN IF ANY DATA */
   const finalStatus =
     notes.trim() || input.files.length
     ? "completed"
@@ -109,12 +132,11 @@ async function handleSave(){
     })
     .eq("id",active.id);
 
-  if(error){ alert(error.message); }
+  if(error) alert(error.message);
 
   input.value="";
-  await loadSystems();
-  await loadPhotos(active.id);
   setStatus(finalStatus);
+  await loadPhotos(active.id);
   setLoading(false);
 }
 
@@ -137,8 +159,6 @@ async function addSystem(){
     alert(error.message);
     return;
   }
-
-  loadSystems();
 }
 
 /* DELETE PHOTO */
