@@ -37,44 +37,31 @@ const [status,setStatus] = useState("not_completed");
 const [search,setSearch] = useState("");
 const [filter,setFilter] = useState("all");
 const [loading,setLoading] = useState(false);
+const [showAdd,setShowAdd] = useState(false);
+const [newId,setNewId] = useState("");
 
 /* LOAD SYSTEMS */
 useEffect(()=>{ loadSystems(); },[]);
 
 async function loadSystems(){
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("systems")
     .select("*")
     .order("id",{ ascending:true });
-
-  if(error) console.error(error);
   setSystems(data || []);
 }
 
-/* REALTIME SUBSCRIPTION */
+/* REALTIME */
 useEffect(()=>{
   const channel = supabase
-    .channel("systems-realtime")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "systems" },
-      payload => {
-        console.log("Realtime update", payload);
-        loadSystems();
+    .channel("systems-live")
+    .on("postgres_changes",
+      { event:"*", schema:"public", table:"systems" },
+      () => loadSystems()
+    ).subscribe();
 
-        if(active && payload.new?.id === active.id){
-          setActive(payload.new);
-          setNotes(payload.new.notes || "");
-          setStatus(payload.new.status || "not_completed");
-        }
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [active]);
+  return ()=> supabase.removeChannel(channel);
+},[]);
 
 /* OPEN SYSTEM */
 useEffect(()=>{
@@ -84,38 +71,35 @@ useEffect(()=>{
   loadPhotos(active.id);
 },[active]);
 
-/* LOAD PHOTOS */
-async function loadPhotos(systemId){
-  const { data } = await supabase
-    .storage
-    .from("photos")
-    .list(systemId);
-
+/* PHOTOS */
+async function loadPhotos(id){
+  const { data } = await supabase.storage.from("photos").list(id);
   if(!data){ setPhotos([]); return; }
 
-  const urls = data.map(file=>{
+  const urls = data.map(f=>{
     const { data:{ publicUrl }} =
       supabase.storage.from("photos")
-      .getPublicUrl(`${systemId}/${file.name}`);
+      .getPublicUrl(`${id}/${f.name}`);
     return publicUrl;
   });
-
   setPhotos(urls);
 }
 
-/* SAVE SYSTEM */
-async function handleSave(){
-  if(!active) return;
-  setLoading(true);
+async function deletePhoto(url){
+  const path = url.split("/photos/")[1];
+  await supabase.storage.from("photos").remove([path]);
+  loadPhotos(active.id);
+}
 
+/* SAVE */
+async function handleSave(){
+  setLoading(true);
   const input = document.getElementById("file-upload");
 
   if(input.files.length){
-    for(const file of input.files){
-      const path = `${active.id}/${Date.now()}_${file.name}`;
-      await supabase.storage
-        .from("photos")
-        .upload(path,file,{ upsert:true });
+    for(const f of input.files){
+      const path = `${active.id}/${Date.now()}_${f.name}`;
+      await supabase.storage.from("photos").upload(path,f,{upsert:true});
     }
   }
 
@@ -124,48 +108,29 @@ async function handleSave(){
     ? "completed"
     : status;
 
-  const { error } = await supabase
+  await supabase
     .from("systems")
-    .update({
-      notes,
-      status: finalStatus
-    })
+    .update({ notes, status: finalStatus })
     .eq("id",active.id);
-
-  if(error) alert(error.message);
 
   input.value="";
   setStatus(finalStatus);
-  await loadPhotos(active.id);
+  loadPhotos(active.id);
   setLoading(false);
 }
 
 /* ADD SYSTEM */
-async function addSystem(){
-  const id = prompt("Enter System Number");
-  if(!id) return;
+async function createSystem(){
+  if(!newId.trim()) return;
 
-  const cleanId = id.trim();
+  await supabase.from("systems").insert([{
+    id:newId.trim(),
+    notes:"",
+    status:"not_completed"
+  }]);
 
-  const { error } = await supabase
-    .from("systems")
-    .insert([{
-      id: cleanId,
-      notes:"",
-      status:"not_completed"
-    }]);
-
-  if(error){
-    alert(error.message);
-    return;
-  }
-}
-
-/* DELETE PHOTO */
-async function deletePhoto(url){
-  const path = url.split("/photos/")[1].split("?")[0];
-  await supabase.storage.from("photos").remove([path]);
-  loadPhotos(active.id);
+  setNewId("");
+  setShowAdd(false);
 }
 
 /* FILTER */
@@ -178,19 +143,26 @@ return(
 <div className="flex h-screen">
 
 {/* SIDEBAR */}
-<div className="w-64 bg-white border-r p-4">
-<h1 className="text-xl font-bold text-blue-600 mb-4">STS QAQC</h1>
+<div className="w-64 bg-white border-r p-4 flex flex-col">
+<h1 className="text-xl font-bold text-blue-600">STS QAQC</h1>
+<p className="text-xs text-gray-400 mb-4">Quality Control System</p>
 
 <button
-onClick={addSystem}
-className="w-full bg-blue-600 text-white py-2 rounded mb-4">
+onClick={()=>setShowAdd(true)}
+className="bg-blue-600 text-white py-2 rounded-lg mb-4">
 + Add System
 </button>
 
 <div className="space-y-2 text-sm">
-<button onClick={()=>setFilter("all")} className="w-full text-left p-2 hover:bg-gray-100 rounded">📁 All</button>
-<button onClick={()=>setFilter("completed")} className="w-full text-left p-2 hover:bg-gray-100 rounded">✅ Completed</button>
-<button onClick={()=>setFilter("not_completed")} className="w-full text-left p-2 hover:bg-gray-100 rounded">❌ Not Completed</button>
+<button onClick={()=>setFilter("all")} className="sidebar-btn">📁 All</button>
+<button onClick={()=>setFilter("completed")} className="sidebar-btn">✅ Completed</button>
+<button onClick={()=>setFilter("not_completed")} className="sidebar-btn">❌ Not Completed</button>
+</div>
+
+<div className="mt-auto p-3 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-xs text-gray-600">
+⚙️ Smart QAQC Dashboard  
+📊 Live Collaboration  
+📷 Photo Evidence  
 </div>
 </div>
 
@@ -199,13 +171,13 @@ className="w-full bg-blue-600 text-white py-2 rounded mb-4">
 
 <div className="flex gap-4 mb-4">
 <input
-className="flex-1 border p-3 rounded"
+className="flex-1 border p-3 rounded-lg"
 placeholder="Search system..."
 onChange={e=>setSearch(e.target.value)}
 />
 
 <select
-className="border p-3 rounded"
+className="border p-3 rounded-lg"
 onChange={e=>setFilter(e.target.value)}>
 <option value="all">All</option>
 <option value="completed">Completed</option>
@@ -218,60 +190,83 @@ onChange={e=>setFilter(e.target.value)}>
 <div
 key={s.id}
 onClick={()=>setActive(s)}
-className={`cursor-pointer border rounded-lg p-4
+className={`cursor-pointer border rounded-xl p-4 transition hover:shadow
 ${s.status==="completed"
 ?"border-green-500 bg-green-50"
 :"border-red-400 bg-red-50"}`}>
 <div className="font-bold">System #{s.id}</div>
 <div className="text-sm mt-2">
-{s.status==="completed"
-?"🟢 Completed"
-:"🔴 Not Completed"}
+{s.status==="completed"?"🟢 Completed":"🔴 Not Completed"}
 </div>
 </div>
 ))}
 </div>
 </div>
 
-{/* MODAL */}
+{/* SYSTEM MODAL */}
 {active && (
 <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
-<div className="bg-white w-full max-w-2xl rounded-lg p-6 space-y-4">
+<div className="bg-white w-full max-w-2xl rounded-2xl p-6 space-y-4 shadow-xl">
 
 <h2 className="text-xl font-bold">System #{active.id}</h2>
 
 <textarea
 value={notes}
 onChange={e=>setNotes(e.target.value)}
-placeholder="Enter notes..."
-className="w-full border p-3 rounded h-28"
+placeholder="Inspection notes..."
+className="w-full border p-3 rounded-xl h-28"
 />
 
 <input id="file-upload" type="file" multiple accept="image/*" />
 
 <div className="grid grid-cols-3 gap-3">
 {photos.map((url,i)=>(
-<div key={i} className="relative">
-<img src={url} className="h-24 w-full object-cover rounded"/>
-<button
-onClick={()=>deletePhoto(url)}
-className="absolute top-1 right-1 bg-red-600 text-white text-xs px-2 rounded">
-✕
-</button>
+<div key={i} className="relative group">
+<img src={url} className="h-24 w-full object-cover rounded-lg"/>
+<div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex gap-2 items-center justify-center rounded-lg">
+<a href={url} download className="bg-white px-2 py-1 text-xs rounded">⬇</a>
+<button onClick={()=>deletePhoto(url)}
+className="bg-red-600 text-white px-2 py-1 text-xs rounded">✕</button>
+</div>
 </div>
 ))}
 </div>
 
 <div className="flex justify-end gap-3">
-<button onClick={()=>setActive(null)} className="px-4 py-2 border rounded">
+<button onClick={()=>setActive(null)} className="px-4 py-2 border rounded-lg">
 Close
 </button>
 <button onClick={handleSave}
-className="px-6 py-2 bg-blue-600 text-white rounded">
+className="px-6 py-2 bg-blue-600 text-white rounded-lg">
 {loading?"Saving...":"Save"}
 </button>
 </div>
 
+</div>
+</div>
+)}
+
+{/* ADD SYSTEM MODAL */}
+{showAdd && (
+<div className="fixed inset-0 bg-black/40 flex items-center justify-center">
+<div className="bg-white p-6 rounded-2xl w-96 space-y-4">
+<h2 className="text-lg font-bold">Add New System</h2>
+
+<input
+value={newId}
+onChange={e=>setNewId(e.target.value)}
+placeholder="System number"
+className="w-full border p-3 rounded-lg"
+/>
+
+<div className="flex justify-end gap-3">
+<button onClick={()=>setShowAdd(false)} className="px-4 py-2 border rounded-lg">
+Cancel
+</button>
+<button onClick={createSystem} className="px-6 py-2 bg-blue-600 text-white rounded-lg">
+Add
+</button>
+</div>
 </div>
 </div>
 )}
