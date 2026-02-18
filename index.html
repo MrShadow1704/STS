@@ -13,8 +13,12 @@
 
 <style>
 body { font-family: Inter, sans-serif; background:#f8fafc; }
-.sidebar-bg{
-  background:linear-gradient(180deg,#ffffff 0%,#f1f5f9 100%);
+.fade-in {
+  animation: fadeIn .25s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity:0; transform:scale(.95); }
+  to { opacity:1; transform:scale(1); }
 }
 </style>
 </head>
@@ -36,38 +40,32 @@ const [systems,setSystems] = useState([]);
 const [active,setActive] = useState(null);
 const [notes,setNotes] = useState("");
 const [photos,setPhotos] = useState([]);
-const [status,setStatus] = useState("not_completed");
 const [search,setSearch] = useState("");
 const [filter,setFilter] = useState("all");
 const [loading,setLoading] = useState(false);
 const [showAdd,setShowAdd] = useState(false);
 const [newId,setNewId] = useState("");
 
-/* LOAD SYSTEMS */
 useEffect(()=>{ loadSystems(); },[]);
 async function loadSystems(){
   const { data } = await supabase.from("systems").select("*").order("id");
   setSystems(data||[]);
 }
 
-/* REALTIME */
 useEffect(()=>{
   const channel = supabase
     .channel("systems-live")
-    .on("postgres_changes",{event:"*",schema:"public",table:"systems"},()=>loadSystems())
+    .on("postgres_changes",{event:"*",schema:"public",table:"systems"},loadSystems)
     .subscribe();
   return()=>supabase.removeChannel(channel);
 },[]);
 
-/* ACTIVE */
 useEffect(()=>{
   if(!active) return;
   setNotes(active.notes||"");
-  setStatus(active.status||"not_completed");
   loadPhotos(active.id);
 },[active]);
 
-/* PHOTOS */
 async function loadPhotos(id){
   const { data } = await supabase.storage.from("photos").list(id);
   if(!data){setPhotos([]);return;}
@@ -84,7 +82,6 @@ async function deletePhoto(url){
   loadPhotos(active.id);
 }
 
-/* SAVE */
 async function handleSave(){
   setLoading(true);
   const input=document.getElementById("file-upload");
@@ -96,27 +93,22 @@ async function handleSave(){
     }
   }
 
-  const finalStatus =
-    notes.trim()||input.files.length ? "completed":"not_completed";
-
   await supabase.from("systems")
-    .update({notes,status:finalStatus})
+    .update({notes,status:"completed"})
     .eq("id",active.id);
 
   input.value="";
-  setStatus(finalStatus);
   loadPhotos(active.id);
   setLoading(false);
 }
 
-/* ADD SYSTEM */
 async function createSystem(){
   if(!newId.trim()) return;
-  await supabase.from("systems").insert([{id:newId.trim(),notes:"",status:"not_completed"}]);
+  await supabase.from("systems")
+    .insert([{id:newId.trim(),notes:"",status:"not_completed"}]);
   setNewId(""); setShowAdd(false);
 }
 
-/* FILTER */
 const filtered=systems.filter(s=>
   s.id.toLowerCase().includes(search.toLowerCase()) &&
   (filter==="all"||s.status===filter)
@@ -126,39 +118,35 @@ return(
 <div className="flex h-screen">
 
 {/* SIDEBAR */}
-<div className="w-80 sidebar-bg border-r p-6 flex flex-col">
+<div className="w-80 bg-white border-r p-6 flex flex-col">
 <h1 className="text-2xl font-bold text-blue-600">STS QAQC</h1>
-<p className="text-sm text-gray-500 mb-6">Quality Assurance Dashboard</p>
+<p className="text-sm text-gray-500 mb-8">Quality Dashboard</p>
 
 <button onClick={()=>setShowAdd(true)}
-className="bg-blue-600 text-white py-3 rounded-xl font-semibold mb-6">
+className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-2xl font-semibold mb-8 hover:scale-[1.02] transition">
 + Add System
 </button>
 
-<div className="space-y-3 text-base">
+<div className="flex flex-col gap-4 text-base">
 <button onClick={()=>setFilter("all")} className="sidebarBtn">📁 All Systems</button>
 <button onClick={()=>setFilter("completed")} className="sidebarBtn">✅ Completed</button>
 <button onClick={()=>setFilter("not_completed")} className="sidebarBtn">❌ Not Completed</button>
 </div>
 
-<div className="mt-auto rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-200 p-6 text-sm text-gray-700">
-<strong>Live QA/QC Platform</strong>
-<ul className="mt-2 space-y-1">
-<li>• Realtime Collaboration</li>
-<li>• Photo Evidence</li>
-<li>• System Tracking</li>
-</ul>
+<div className="mt-auto rounded-3xl bg-gradient-to-br from-blue-100 to-indigo-200 p-6 text-sm text-gray-700">
+<div className="font-bold mb-2">Smart QA/QC</div>
+<p>Realtime collaboration<br/>Photo evidence<br/>Progress tracking</p>
 </div>
 </div>
 
 {/* MAIN */}
-<div className="flex-1 p-8 overflow-y-auto">
+<div className="flex-1 p-10 overflow-y-auto">
 
-<div className="flex gap-4 mb-6">
-<input className="flex-1 border p-4 rounded-xl"
+<div className="flex gap-4 mb-8">
+<input className="flex-1 border p-4 rounded-2xl"
 placeholder="Search system..."
 onChange={e=>setSearch(e.target.value)}/>
-<select className="border p-4 rounded-xl" onChange={e=>setFilter(e.target.value)}>
+<select className="border p-4 rounded-2xl" onChange={e=>setFilter(e.target.value)}>
 <option value="all">All</option>
 <option value="completed">Completed</option>
 <option value="not_completed">Not Completed</option>
@@ -168,7 +156,7 @@ onChange={e=>setSearch(e.target.value)}/>
 <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6">
 {filtered.map(s=>(
 <div key={s.id} onClick={()=>setActive(s)}
-className={`cursor-pointer p-5 rounded-2xl border shadow-sm hover:shadow-lg transition
+className={`cursor-pointer p-6 rounded-3xl border shadow hover:shadow-xl hover:-translate-y-1 transition
 ${s.status==="completed"?"bg-green-50 border-green-500":"bg-red-50 border-red-400"}`}>
 <h3 className="font-bold text-lg">System #{s.id}</h3>
 <p className="mt-2 text-sm">
@@ -182,27 +170,32 @@ ${s.status==="completed"?"bg-green-50 border-green-500":"bg-red-50 border-red-40
 {/* SYSTEM MODAL */}
 {active&&(
 <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
-<div className="bg-white w-full max-w-3xl rounded-3xl p-8 shadow-2xl space-y-5">
+<div className="bg-white w-full max-w-4xl rounded-[32px] p-8 shadow-2xl fade-in">
 
+<div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl p-6 mb-6">
 <h2 className="text-2xl font-bold">System #{active.id}</h2>
+<p className="text-sm opacity-80">Inspection & Documentation</p>
+</div>
 
 <textarea value={notes} onChange={e=>setNotes(e.target.value)}
-className="w-full border p-4 rounded-2xl h-32"
+className="w-full border p-5 rounded-2xl h-36 mb-4"
 placeholder="Inspection notes..."/>
 
-<input id="file-upload" type="file" multiple />
+<input id="file-upload" type="file" multiple className="mb-6"/>
 
-<div className="grid grid-cols-3 gap-4">
+<div className="grid grid-cols-3 gap-5 mb-6">
 {photos.map((url,i)=>(
 <div key={i} className="border rounded-2xl p-2">
-<img src={url} className="h-28 w-full object-cover rounded-xl"/>
-<div className="flex justify-between mt-2">
+<a href={url} target="_blank">
+<img src={url} className="h-32 w-full object-cover rounded-xl cursor-pointer"/>
+</a>
+<div className="flex gap-2 mt-3">
 <a href={url} download
-className="flex-1 mr-1 bg-blue-600 text-white py-2 rounded-lg text-sm text-center">
+className="flex-1 bg-blue-600 text-white py-2 rounded-xl text-sm text-center">
 ⬇ Download
 </a>
 <button onClick={()=>deletePhoto(url)}
-className="flex-1 ml-1 bg-red-600 text-white py-2 rounded-lg text-sm">
+className="flex-1 bg-red-600 text-white py-2 rounded-xl text-sm">
 🗑 Delete
 </button>
 </div>
@@ -211,9 +204,9 @@ className="flex-1 ml-1 bg-red-600 text-white py-2 rounded-lg text-sm">
 </div>
 
 <div className="flex justify-end gap-4">
-<button onClick={()=>setActive(null)} className="px-5 py-3 border rounded-xl">Close</button>
+<button onClick={()=>setActive(null)} className="px-6 py-3 border rounded-xl">Close</button>
 <button onClick={handleSave}
-className="px-6 py-3 bg-blue-600 text-white rounded-xl">
+className="px-8 py-3 bg-blue-600 text-white rounded-xl">
 {loading?"Saving...":"Save"}
 </button>
 </div>
@@ -225,13 +218,15 @@ className="px-6 py-3 bg-blue-600 text-white rounded-xl">
 {/* ADD SYSTEM MODAL */}
 {showAdd&&(
 <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
-<div className="bg-white w-96 rounded-3xl p-6 shadow-2xl space-y-4">
-<h2 className="text-xl font-bold">Add New System</h2>
+<div className="bg-white w-96 rounded-[32px] p-8 shadow-2xl fade-in">
+<h2 className="text-xl font-bold mb-4">Add New System</h2>
 <input value={newId} onChange={e=>setNewId(e.target.value)}
-className="w-full border p-4 rounded-2xl" placeholder="System Number"/>
-<div className="flex justify-end gap-3">
+className="w-full border p-4 rounded-2xl mb-6"
+placeholder="System Number"/>
+<div className="flex justify-end gap-4">
 <button onClick={()=>setShowAdd(false)} className="px-4 py-2 border rounded-xl">Cancel</button>
-<button onClick={createSystem} className="px-6 py-2 bg-blue-600 text-white rounded-xl">Add</button>
+<button onClick={createSystem}
+className="px-6 py-2 bg-blue-600 text-white rounded-xl">Add</button>
 </div>
 </div>
 </div>
@@ -241,9 +236,8 @@ className="w-full border p-4 rounded-2xl" placeholder="System Number"/>
 );
 }
 
-function sidebarBtn({children}){}
-
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+
 </script>
 </body>
 </html>
