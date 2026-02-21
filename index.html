@@ -13,9 +13,7 @@
 
 <style>
 body { font-family: Inter, sans-serif; background:#f8fafc; }
-.fade-in {
-  animation: fadeIn .25s ease-out;
-}
+.fade-in { animation: fadeIn .25s ease-out; }
 @keyframes fadeIn {
   from { opacity:0; transform:scale(.95); }
   to { opacity:1; transform:scale(1); }
@@ -27,217 +25,394 @@ body { font-family: Inter, sans-serif; background:#f8fafc; }
 <div id="root"></div>
 
 <script type="text/babel">
-
 const { useState, useEffect } = React;
 
 const SB_URL = "https://bbgcsddwzcrxwzczrojf.supabase.co";
 const SB_KEY = "sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f";
-const supabase = window.supabase.createClient(SB_URL, SB_KEY);
+const supabase = window.supabase.createClient(SB_URL, SB_KEY); // [web:57][web:23]
 
-function App(){
+/* ============= AUTH ============= */
+function Auth({ onAuth }) {
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [show, setShow] = useState(false);
+  const [mode, setMode] = useState("login");
+  const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(false);
 
-const [systems,setSystems] = useState([]);
-const [active,setActive] = useState(null);
-const [notes,setNotes] = useState("");
-const [photos,setPhotos] = useState([]);
-const [search,setSearch] = useState("");
-const [filter,setFilter] = useState("all");
-const [loading,setLoading] = useState(false);
-const [showAdd,setShowAdd] = useState(false);
-const [newId,setNewId] = useState("");
+  async function submit() {
+    setMsg("");
+    setLoading(true);
 
-useEffect(()=>{ loadSystems(); },[]);
-async function loadSystems(){
-  const { data } = await supabase.from("systems").select("*").order("id");
-  setSystems(data||[]);
-}
-
-useEffect(()=>{
-  const channel = supabase
-    .channel("systems-live")
-    .on("postgres_changes",{event:"*",schema:"public",table:"systems"},loadSystems)
-    .subscribe();
-  return()=>supabase.removeChannel(channel);
-},[]);
-
-useEffect(()=>{
-  if(!active) return;
-  setNotes(active.notes||"");
-  loadPhotos(active.id);
-},[active]);
-
-async function loadPhotos(id){
-  const { data } = await supabase.storage.from("photos").list(id);
-  if(!data){setPhotos([]);return;}
-  setPhotos(data.map(f=>{
-    const {data:{publicUrl}} =
-      supabase.storage.from("photos").getPublicUrl(`${id}/${f.name}`);
-    return publicUrl;
-  }));
-}
-
-async function deletePhoto(url){
-  const path = url.split("/photos/")[1];
-  await supabase.storage.from("photos").remove([path]);
-  loadPhotos(active.id);
-}
-
-async function handleSave(){
-  setLoading(true);
-  const input=document.getElementById("file-upload");
-
-  if(input.files.length){
-    for(const f of input.files){
-      const path=`${active.id}/${Date.now()}_${f.name}`;
-      await supabase.storage.from("photos").upload(path,f,{upsert:true});
+    if (!email || !pass) {
+      setMsg("❌ Enter email and password");
+      setLoading(false);
+      return;
     }
+
+    try {
+      if (mode === "signup") {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password: pass,
+          options: { emailRedirectTo: window.location.origin }
+        }); // [web:57]
+        if (error) throw error;
+        setMsg("✅ Account created. You can login now.");
+        setMode("login");
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password: pass
+        }); // [web:23]
+        if (error) throw error;
+        onAuth(data.user);
+      }
+    } catch (e) {
+      const message = e?.message || "Unknown error";
+      if (message.toLowerCase().includes("invalid login")) {
+        setMsg("❌ Invalid email or password");
+      } else if (message.toLowerCase().includes("already")) {
+        setMsg("⚠️ User already exists");
+      } else if (message.toLowerCase().includes("email not confirmed")) {
+        setMsg("⚠️ Supabase still requires email confirmation in settings.");
+      } else {
+        setMsg("❌ " + message);
+      }
+    }
+
+    setLoading(false);
   }
 
-  await supabase.from("systems")
-    .update({notes,status:"completed"})
-    .eq("id",active.id);
+  return (
+    <div className="h-screen flex items-center justify-center bg-slate-100">
+      <div className="bg-white w-96 p-8 rounded-3xl shadow-xl fade-in space-y-4">
+        <h1 className="text-2xl font-bold text-center text-blue-600">
+          STS QAQC
+        </h1>
 
-  input.value="";
-  loadPhotos(active.id);
-  setLoading(false);
+        <input
+          className="w-full border p-3 rounded-xl"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+
+        <div className="relative">
+          <input
+            type={show ? "text" : "password"}
+            className="w-full border p-3 rounded-xl pr-12"
+            placeholder="Password"
+            value={pass}
+            onChange={(e) => setPass(e.target.value)}
+          />
+          <button
+            type="button"
+            onClick={() => setShow(!show)}
+            className="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-500"
+            aria-label={show ? "Hide password" : "Show password"}
+          >
+            {show ? (
+              /* eye-off icon */
+              <svg xmlns="http://www.w3.org/2000/svg"
+                   fill="none"
+                   viewBox="0 0 24 24"
+                   strokeWidth="1.5"
+                   stroke="currentColor"
+                   className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+              </svg>
+            ) : (
+              /* eye icon */
+              <svg xmlns="http://www.w3.org/2000/svg"
+                   fill="none"
+                   viewBox="0 0 24 24"
+                   strokeWidth="1.5"
+                   stroke="currentColor"
+                   className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            )}
+          </button>
+        </div>
+
+        {msg && (
+          <div className="text-sm text-center text-gray-700">
+            {msg}
+          </div>
+        )}
+
+        <button
+          disabled={loading}
+          onClick={submit}
+          className="w-full bg-blue-600 text-white p-3 rounded-xl disabled:opacity-60"
+        >
+          {loading
+            ? "Please wait..."
+            : mode === "login"
+            ? "Login"
+            : "Create Account"}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMode(mode === "login" ? "signup" : "login")}
+          className="w-full text-sm text-blue-600"
+        >
+          {mode === "login"
+            ? "New user? Create account"
+            : "Already have an account? Login"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
-async function createSystem(){
-  if(!newId.trim()) return;
-  await supabase.from("systems")
-    .insert([{id:newId.trim(),notes:"",status:"not_completed"}]);
-  setNewId(""); setShowAdd(false);
+/* ============= DASHBOARD (YOUR APP) ============= */
+function Dashboard({ user }) {
+
+  const [systems,setSystems] = useState([]);
+  const [active,setActive] = useState(null);
+  const [notes,setNotes] = useState("");
+  const [photos,setPhotos] = useState([]);
+  const [search,setSearch] = useState("");
+  const [filter,setFilter] = useState("all");
+  const [loading,setLoading] = useState(false);
+  const [showAdd,setShowAdd] = useState(false);
+  const [newId,setNewId] = useState("");
+
+  useEffect(()=>{ loadSystems(); },[]);
+  async function loadSystems(){
+    const { data } = await supabase.from("systems").select("*").order("id");
+    setSystems(data||[]);
+  }
+
+  useEffect(()=>{
+    const channel = supabase
+      .channel("systems-live")
+      .on("postgres_changes",{event:"*",schema:"public",table:"systems"},loadSystems)
+      .subscribe();
+    return()=>supabase.removeChannel(channel);
+  },[]);
+
+  useEffect(()=>{
+    if(!active) return;
+    setNotes(active.notes||"");
+    loadPhotos(active.id);
+  },[active]);
+
+  async function loadPhotos(id){
+    const { data } = await supabase.storage.from("photos").list(id);
+    if(!data){setPhotos([]);return;}
+    setPhotos(data.map(f=>{
+      const {data:{publicUrl}} =
+        supabase.storage.from("photos").getPublicUrl(`${id}/${f.name}`);
+      return publicUrl;
+    }));
+  }
+
+  async function deletePhoto(url){
+    const path = url.split("/photos/")[1];
+    await supabase.storage.from("photos").remove([path]);
+    loadPhotos(active.id);
+  }
+
+  async function handleSave(){
+    setLoading(true);
+    const input=document.getElementById("file-upload");
+
+    if(input.files.length){
+      for(const f of input.files){
+        const path=`${active.id}/${Date.now()}_${f.name}`;
+        await supabase.storage.from("photos").upload(path,f,{upsert:true});
+      }
+    }
+
+    await supabase.from("systems")
+      .update({notes,status:"completed"})
+      .eq("id",active.id);
+
+    input.value="";
+    loadPhotos(active.id);
+    setLoading(false);
+  }
+
+  async function createSystem(){
+    if(!newId.trim()) return;
+    await supabase.from("systems")
+      .insert([{id:newId.trim(),notes:"",status:"not_completed"}]);
+    setNewId(""); setShowAdd(false);
+  }
+
+  const filtered=systems.filter(s=>
+    s.id.toLowerCase().includes(search.toLowerCase()) &&
+    (filter==="all"||s.status===filter)
+  );
+
+  return(
+  <div className="flex h-screen">
+
+    {/* SIDEBAR */}
+    <div className="w-80 bg-white border-r p-6 flex flex-col">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <h1 className="text-2xl font-bold text-blue-600">STS QAQC</h1>
+          <p className="text-xs text-gray-500">
+            Logged in as {user?.email}
+          </p>
+        </div>
+      </div>
+      <p className="text-sm text-gray-500 mb-4">Quality Dashboard</p>
+
+      <button
+        onClick={() => setShowAdd(true)}
+        className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-2xl font-semibold mb-4 hover:scale-[1.02] transition">
+        + Add System
+      </button>
+
+      <button
+        onClick={() => supabase.auth.signOut()}
+        className="mb-6 px-4 py-2 border rounded-xl text-sm text-red-600 border-red-500">
+        Logout
+      </button>
+
+      <div className="flex flex-col gap-4 text-base">
+        <button onClick={()=>setFilter("all")} className="sidebarBtn">📁 All Systems</button>
+        <button onClick={()=>setFilter("completed")} className="sidebarBtn">✅ Completed</button>
+        <button onClick={()=>setFilter("not_completed")} className="sidebarBtn">❌ Not Completed</button>
+      </div>
+
+      <div className="mt-auto rounded-3xl bg-gradient-to-br from-blue-100 to-indigo-200 p-6 text-sm text-gray-700">
+        <div className="font-bold mb-2">Smart QA/QC</div>
+        <p>Realtime collaboration<br/>Photo evidence<br/>Progress tracking</p>
+      </div>
+    </div>
+
+    {/* MAIN */}
+    <div className="flex-1 p-10 overflow-y-auto">
+
+      <div className="flex gap-4 mb-8">
+        <input className="flex-1 border p-4 rounded-2xl"
+          placeholder="Search system..."
+          onChange={e=>setSearch(e.target.value)}/>
+        <select className="border p-4 rounded-2xl" onChange={e=>setFilter(e.target.value)}>
+          <option value="all">All</option>
+          <option value="completed">Completed</option>
+          <option value="not_completed">Not Completed</option>
+        </select>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6">
+        {filtered.map(s=>(
+        <div key={s.id} onClick={()=>setActive(s)}
+          className={`cursor-pointer p-6 rounded-3xl border shadow hover:shadow-xl hover:-translate-y-1 transition
+          ${s.status==="completed"?"bg-green-50 border-green-500":"bg-red-50 border-red-400"}`}>
+          <h3 className="font-bold text-lg">System #{s.id}</h3>
+          <p className="mt-2 text-sm">
+            {s.status==="completed"?"🟢 Completed":"🔴 Not Completed"}
+          </p>
+        </div>
+        ))}
+      </div>
+    </div>
+
+    {/* SYSTEM MODAL */}
+    {active&&(
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
+      <div className="bg-white w-full max-w-4xl rounded-[32px] p-8 shadow-2xl fade-in">
+
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl p-6 mb-6">
+          <h2 className="text-2xl font-bold">System #{active.id}</h2>
+          <p className="text-sm opacity-80">Inspection & Documentation</p>
+        </div>
+
+        <textarea value={notes} onChange={e=>setNotes(e.target.value)}
+          className="w-full border p-5 rounded-2xl h-36 mb-4"
+          placeholder="Inspection notes..."/>
+
+        <input id="file-upload" type="file" multiple className="mb-6"/>
+
+        <div className="grid grid-cols-3 gap-5 mb-6">
+          {photos.map((url,i)=>(
+          <div key={i} className="border rounded-2xl p-2">
+            <a href={url} target="_blank">
+              <img src={url} className="h-32 w-full object-cover rounded-xl cursor-pointer"/>
+            </a>
+            <div className="flex gap-2 mt-3">
+              <a href={url} download
+                className="flex-1 bg-blue-600 text-white py-2 rounded-xl text-sm text-center">
+                ⬇ Download
+              </a>
+              <button onClick={()=>deletePhoto(url)}
+                className="flex-1 bg-red-600 text-white py-2 rounded-xl text-sm">
+                🗑 Delete
+              </button>
+            </div>
+          </div>
+          ))}
+        </div>
+
+        <div className="flex justify-end gap-4">
+          <button onClick={()=>setActive(null)} className="px-6 py-3 border rounded-xl">Close</button>
+          <button onClick={handleSave}
+            className="px-8 py-3 bg-blue-600 text-white rounded-xl">
+            {loading?"Saving...":"Save"}
+          </button>
+        </div>
+
+      </div>
+    </div>
+    )}
+
+    {/* ADD SYSTEM MODAL */}
+    {showAdd&&(
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
+      <div className="bg-white w-96 rounded-[32px] p-8 shadow-2xl fade-in">
+        <h2 className="text-xl font-bold mb-4">Add New System</h2>
+        <input value={newId} onChange={e=>setNewId(e.target.value)}
+          className="w-full border p-4 rounded-2xl mb-6"
+          placeholder="System Number"/>
+        <div className="flex justify-end gap-4">
+          <button onClick={()=>setShowAdd(false)} className="px-4 py-2 border rounded-xl">Cancel</button>
+          <button onClick={createSystem}
+            className="px-6 py-2 bg-blue-600 text-white rounded-xl">Add</button>
+        </div>
+      </div>
+    </div>
+    )}
+
+  </div>
+  );
 }
 
-const filtered=systems.filter(s=>
-  s.id.toLowerCase().includes(search.toLowerCase()) &&
-  (filter==="all"||s.status===filter)
-);
+/* ============= ROOT (SWITCH LOGIN / DASHBOARD) ============= */
+function Root(){
+  const [user,setUser]=useState(null);
+  const [ready,setReady]=useState(false);
 
-return(
-<div className="flex h-screen">
+  useEffect(()=>{
+    supabase.auth.getUser().then(res=>{
+      setUser(res.data.user);
+      setReady(true);
+    }); // [web:48]
 
-{/* SIDEBAR */}
-<div className="w-80 bg-white border-r p-6 flex flex-col">
-<h1 className="text-2xl font-bold text-blue-600">STS QAQC</h1>
-<p className="text-sm text-gray-500 mb-8">Quality Dashboard</p>
+    const { data: sub } =
+      supabase.auth.onAuthStateChange((_,session)=>{
+        setUser(session?.user || null);
+      }); // [web:43][web:59]
 
-<button onClick={()=>setShowAdd(true)}
-className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-2xl font-semibold mb-8 hover:scale-[1.02] transition">
-+ Add System
-</button>
+    return ()=>sub.subscription.unsubscribe();
+  },[]);
 
-<div className="flex flex-col gap-4 text-base">
-<button onClick={()=>setFilter("all")} className="sidebarBtn">📁 All Systems</button>
-<button onClick={()=>setFilter("completed")} className="sidebarBtn">✅ Completed</button>
-<button onClick={()=>setFilter("not_completed")} className="sidebarBtn">❌ Not Completed</button>
-</div>
-
-<div className="mt-auto rounded-3xl bg-gradient-to-br from-blue-100 to-indigo-200 p-6 text-sm text-gray-700">
-<div className="font-bold mb-2">Smart QA/QC</div>
-<p>Realtime collaboration<br/>Photo evidence<br/>Progress tracking</p>
-</div>
-</div>
-
-{/* MAIN */}
-<div className="flex-1 p-10 overflow-y-auto">
-
-<div className="flex gap-4 mb-8">
-<input className="flex-1 border p-4 rounded-2xl"
-placeholder="Search system..."
-onChange={e=>setSearch(e.target.value)}/>
-<select className="border p-4 rounded-2xl" onChange={e=>setFilter(e.target.value)}>
-<option value="all">All</option>
-<option value="completed">Completed</option>
-<option value="not_completed">Not Completed</option>
-</select>
-</div>
-
-<div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6">
-{filtered.map(s=>(
-<div key={s.id} onClick={()=>setActive(s)}
-className={`cursor-pointer p-6 rounded-3xl border shadow hover:shadow-xl hover:-translate-y-1 transition
-${s.status==="completed"?"bg-green-50 border-green-500":"bg-red-50 border-red-400"}`}>
-<h3 className="font-bold text-lg">System #{s.id}</h3>
-<p className="mt-2 text-sm">
-{s.status==="completed"?"🟢 Completed":"🔴 Not Completed"}
-</p>
-</div>
-))}
-</div>
-</div>
-
-{/* SYSTEM MODAL */}
-{active&&(
-<div className="fixed inset-0 bg-black/40 flex items-center justify-center">
-<div className="bg-white w-full max-w-4xl rounded-[32px] p-8 shadow-2xl fade-in">
-
-<div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl p-6 mb-6">
-<h2 className="text-2xl font-bold">System #{active.id}</h2>
-<p className="text-sm opacity-80">Inspection & Documentation</p>
-</div>
-
-<textarea value={notes} onChange={e=>setNotes(e.target.value)}
-className="w-full border p-5 rounded-2xl h-36 mb-4"
-placeholder="Inspection notes..."/>
-
-<input id="file-upload" type="file" multiple className="mb-6"/>
-
-<div className="grid grid-cols-3 gap-5 mb-6">
-{photos.map((url,i)=>(
-<div key={i} className="border rounded-2xl p-2">
-<a href={url} target="_blank">
-<img src={url} className="h-32 w-full object-cover rounded-xl cursor-pointer"/>
-</a>
-<div className="flex gap-2 mt-3">
-<a href={url} download
-className="flex-1 bg-blue-600 text-white py-2 rounded-xl text-sm text-center">
-⬇ Download
-</a>
-<button onClick={()=>deletePhoto(url)}
-className="flex-1 bg-red-600 text-white py-2 rounded-xl text-sm">
-🗑 Delete
-</button>
-</div>
-</div>
-))}
-</div>
-
-<div className="flex justify-end gap-4">
-<button onClick={()=>setActive(null)} className="px-6 py-3 border rounded-xl">Close</button>
-<button onClick={handleSave}
-className="px-8 py-3 bg-blue-600 text-white rounded-xl">
-{loading?"Saving...":"Save"}
-</button>
-</div>
-
-</div>
-</div>
-)}
-
-{/* ADD SYSTEM MODAL */}
-{showAdd&&(
-<div className="fixed inset-0 bg-black/40 flex items-center justify-center">
-<div className="bg-white w-96 rounded-[32px] p-8 shadow-2xl fade-in">
-<h2 className="text-xl font-bold mb-4">Add New System</h2>
-<input value={newId} onChange={e=>setNewId(e.target.value)}
-className="w-full border p-4 rounded-2xl mb-6"
-placeholder="System Number"/>
-<div className="flex justify-end gap-4">
-<button onClick={()=>setShowAdd(false)} className="px-4 py-2 border rounded-xl">Cancel</button>
-<button onClick={createSystem}
-className="px-6 py-2 bg-blue-600 text-white rounded-xl">Add</button>
-</div>
-</div>
-</div>
-)}
-
-</div>
-);
+  if(!ready) return null;
+  return user ? <Dashboard user={user}/> : <Auth onAuth={setUser}/>;
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
-
+ReactDOM.createRoot(document.getElementById("root")).render(<Root/>);
 </script>
 </body>
 </html>
