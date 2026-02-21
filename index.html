@@ -12,7 +12,7 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
 <style>
-.fade { animation: fade .3s ease; }
+.fade { animation: fade .25s ease; }
 @keyframes fade {
   from { opacity:0; transform:scale(.95); }
   to { opacity:1; transform:scale(1); }
@@ -26,6 +26,7 @@
 <script type="text/babel">
 const { useState, useEffect } = React;
 
+/* ✅ CORRECT FOR NEW SUPABASE PROJECTS */
 const supabase = window.supabase.createClient(
   "https://bbgcsddwzcrxwzczrojf.supabase.co",
   "sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f"
@@ -35,208 +36,134 @@ const supabase = window.supabase.createClient(
 function Auth({ onAuth }) {
   const [email,setEmail]=useState("");
   const [pass,setPass]=useState("");
-  const [isSignup,setIsSignup]=useState(false);
-  const [error,setError]=useState("");
+  const [mode,setMode]=useState("login");
+  const [msg,setMsg]=useState("");
+  const [loading,setLoading]=useState(false);
 
   async function submit(){
-    setError("");
-    const fn = isSignup
-      ? supabase.auth.signUp
-      : supabase.auth.signInWithPassword;
-
-    const { data, error } = await fn({ email, password: pass });
-    if(error) setError(error.message);
-    if(data?.user) onAuth(data.user);
+    setMsg("");
+    setLoading(true);
+    try{
+      if(mode==="signup"){
+        const { error } = await supabase.auth.signUp({
+          email,
+          password: pass
+        });
+        if(error) throw error;
+        setMsg("✅ Account created successfully. Please login.");
+        setMode("login");
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password: pass
+        });
+        if(error) throw error;
+        onAuth(data.user);
+      }
+    } catch(e){
+      if(e.message.includes("Invalid login"))
+        setMsg("❌ Invalid email or password");
+      else if(e.message.includes("already registered"))
+        setMsg("⚠️ User already exists");
+      else
+        setMsg("❌ " + e.message);
+    }
+    setLoading(false);
   }
 
   return (
     <div className="h-screen flex items-center justify-center">
-      <div className="bg-white p-8 w-96 rounded-3xl shadow-xl space-y-4 fade">
+      <div className="bg-white w-96 p-8 rounded-3xl shadow-xl fade space-y-4">
         <h1 className="text-2xl font-bold text-center text-blue-600">
           STS QAQC
         </h1>
 
-        <input className="w-full border p-3 rounded-xl"
-          placeholder="Email" onChange={e=>setEmail(e.target.value)} />
+        <input
+          className="w-full border p-3 rounded-xl"
+          placeholder="Email"
+          value={email}
+          onChange={e=>setEmail(e.target.value)}
+        />
 
-        <input type="password" className="w-full border p-3 rounded-xl"
-          placeholder="Password" onChange={e=>setPass(e.target.value)} />
+        <input
+          type="password"
+          className="w-full border p-3 rounded-xl"
+          placeholder="Password"
+          value={pass}
+          onChange={e=>setPass(e.target.value)}
+        />
 
-        {error && <div className="text-red-600 text-sm">{error}</div>}
+        {msg && (
+          <div className="text-sm text-center text-gray-700">
+            {msg}
+          </div>
+        )}
 
-        <button onClick={submit}
-          className="w-full bg-blue-600 text-white p-3 rounded-xl">
-          {isSignup ? "Create Account" : "Login"}
+        <button
+          disabled={loading}
+          onClick={submit}
+          className="w-full bg-blue-600 text-white p-3 rounded-xl disabled:opacity-60"
+        >
+          {loading ? "Please wait..." : mode==="login" ? "Login" : "Create Account"}
         </button>
 
-        <button onClick={()=>setIsSignup(!isSignup)}
-          className="w-full text-sm text-blue-600">
-          {isSignup ? "Already have an account? Login"
-                    : "New user? Create account"}
+        <button
+          onClick={()=>setMode(mode==="login"?"signup":"login")}
+          className="w-full text-sm text-blue-600"
+        >
+          {mode==="login"
+            ? "New user? Create account"
+            : "Already have an account? Login"}
         </button>
       </div>
     </div>
   );
 }
 
-/* ================= APP ================= */
-function App({ user }) {
-  const [systems,setSystems]=useState([]);
-  const [active,setActive]=useState(null);
-  const [notes,setNotes]=useState("");
-  const [photos,setPhotos]=useState([]);
-  const [search,setSearch]=useState("");
-  const [showAdd,setShowAdd]=useState(false);
-  const [newId,setNewId]=useState("");
-
-  useEffect(()=>{ load(); },[]);
-  async function load(){
-    const { data } = await supabase.from("systems").select("*").order("id");
-    setSystems(data||[]);
-  }
-
-  useEffect(()=>{
-    if(active){
-      const draft = localStorage.getItem("draft_"+active.id);
-      setNotes(draft ?? active.notes ?? "");
-      loadPhotos(active.id);
-    }
-  },[active]);
-
-  function saveDraft(v){
-    setNotes(v);
-    active && localStorage.setItem("draft_"+active.id,v);
-  }
-
-  async function save(){
-    await supabase.from("systems").update({
-      notes,
-      status:"completed",
-      updated_by:user.email,
-      updated_at:new Date()
-    }).eq("id",active.id);
-
-    localStorage.removeItem("draft_"+active.id);
-    load();
-    setActive(null);
-  }
-
-  async function loadPhotos(id){
-    const { data } = await supabase.storage.from("photos").list(id);
-    setPhotos((data||[]).map(f =>
-      supabase.storage.from("photos")
-      .getPublicUrl(`${id}/${f.name}`).data.publicUrl));
-  }
-
-  async function upload(e){
-    const file=e.target.files[0];
-    if(!file) return;
-    const path=`${active.id}/${Date.now()}_${file.name}`;
-    await supabase.storage.from("photos").upload(path,file);
-    loadPhotos(active.id);
-  }
-
-  async function addSystem(){
-    await supabase.from("systems").insert({
-      id:newId,status:"not_completed"
-    });
-    setShowAdd(false); setNewId(""); load();
-  }
-
-  const list=systems.filter(s=>s.id.includes(search));
-
+/* ================= DASHBOARD ================= */
+function Dashboard({ user }) {
   return (
-  <div className="flex h-screen">
-    <aside className="w-72 bg-white p-6 space-y-4">
-      <h2 className="text-xl font-bold text-blue-600">Systems</h2>
-      <input className="w-full border p-2 rounded-xl"
-        placeholder="Search"
-        value={search}
-        onChange={e=>setSearch(e.target.value)} />
-      <button onClick={()=>setSearch("")}
-        className="w-full border rounded-xl p-2">
-        Clear
+    <div className="h-screen flex flex-col items-center justify-center space-y-4">
+      <h2 className="text-2xl font-bold text-green-600">
+        ✅ Login successful
+      </h2>
+      <p className="text-lg">
+        Welcome, <b>{user.email}</b>
+      </p>
+      <button
+        onClick={()=>supabase.auth.signOut()}
+        className="px-6 py-3 bg-red-500 text-white rounded-xl"
+      >
+        Logout
       </button>
-      <button onClick={()=>setShowAdd(true)}
-        className="w-full bg-blue-600 text-white p-3 rounded-xl">
-        + Add System
-      </button>
-    </aside>
-
-    <main className="flex-1 p-8 overflow-auto grid grid-cols-2 md:grid-cols-4 gap-4">
-      {list.map(s=>(
-        <div key={s.id} onClick={()=>setActive(s)}
-          className={`p-5 rounded-2xl cursor-pointer shadow
-          ${s.status==="completed"?"bg-green-100":"bg-red-100"}`}>
-          <div className="font-bold">#{s.id}</div>
-          <div className="text-xs">{s.updated_by}</div>
-        </div>
-      ))}
-    </main>
-
-    {active && (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
-      <div className="bg-white p-6 w-full max-w-3xl rounded-3xl fade">
-        <h3 className="font-bold mb-2">System #{active.id}</h3>
-
-        <textarea className="w-full border p-4 rounded-xl h-32"
-          value={notes}
-          onChange={e=>saveDraft(e.target.value)} />
-
-        <input type="file"
-          accept="image/*"
-          capture={/Mobi/.test(navigator.userAgent)}
-          onChange={upload}
-          className="my-4" />
-
-        <div className="grid grid-cols-3 gap-3">
-          {photos.map((p,i)=>(
-            <a key={i} href={p} target="_blank">
-              <img src={p} className="rounded-xl"/>
-            </a>
-          ))}
-        </div>
-
-        <div className="flex justify-end gap-3 mt-4">
-          <button onClick={()=>setActive(null)}
-            className="border px-4 py-2 rounded-xl">Close</button>
-          <button onClick={save}
-            className="bg-blue-600 text-white px-6 py-2 rounded-xl">
-            Save
-          </button>
-        </div>
-      </div>
     </div>
-    )}
-
-    {showAdd && (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
-      <div className="bg-white p-6 rounded-3xl fade">
-        <input className="border p-3 rounded-xl"
-          placeholder="System ID"
-          onChange={e=>setNewId(e.target.value)} />
-        <button onClick={addSystem}
-          className="mt-3 w-full bg-blue-600 text-white p-2 rounded-xl">
-          Add
-        </button>
-      </div>
-    </div>
-    )}
-  </div>
   );
 }
 
 /* ================= ROOT ================= */
 function Root(){
   const [user,setUser]=useState(null);
+  const [ready,setReady]=useState(false);
+
   useEffect(()=>{
-    supabase.auth.getUser().then(r=>setUser(r.data.user));
-    supabase.auth.onAuthStateChange((_,s)=>setUser(s?.user||null));
+    supabase.auth.getUser().then(res=>{
+      setUser(res.data.user);
+      setReady(true);
+    });
+
+    const { data: listener } =
+      supabase.auth.onAuthStateChange((_,session)=>{
+        setUser(session?.user || null);
+      });
+
+    return ()=>listener.subscription.unsubscribe();
   },[]);
-  return user ? <App user={user}/> : <Auth onAuth={setUser}/>;
+
+  if(!ready) return null;
+  return user ? <Dashboard user={user}/> : <Auth onAuth={setUser}/>;
 }
 
-ReactDOM.createRoot(root).render(<Root/>);
+ReactDOM.createRoot(document.getElementById("root")).render(<Root/>);
 </script>
 </body>
 </html>
