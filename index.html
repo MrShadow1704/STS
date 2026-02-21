@@ -26,7 +26,6 @@
 <script type="text/babel">
 const { useState, useEffect } = React;
 
-/* ✅ CORRECT FOR NEW SUPABASE PROJECTS */
 const supabase = window.supabase.createClient(
   "https://bbgcsddwzcrxwzczrojf.supabase.co",
   "sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f"
@@ -36,6 +35,7 @@ const supabase = window.supabase.createClient(
 function Auth({ onAuth }) {
   const [email,setEmail]=useState("");
   const [pass,setPass]=useState("");
+  const [show,setShow]=useState(false);
   const [mode,setMode]=useState("login");
   const [msg,setMsg]=useState("");
   const [loading,setLoading]=useState(false);
@@ -47,23 +47,25 @@ function Auth({ onAuth }) {
       if(mode==="signup"){
         const { error } = await supabase.auth.signUp({
           email,
-          password: pass
+          password: pass,
+          options:{ emailRedirectTo: window.location.origin }
         });
         if(error) throw error;
-        setMsg("✅ Account created successfully. Please login.");
+        setMsg("✅ Account created. You can login now.");
         setMode("login");
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password: pass
-        });
+        const { data, error } =
+          await supabase.auth.signInWithPassword({
+            email,
+            password: pass
+          });
         if(error) throw error;
         onAuth(data.user);
       }
     } catch(e){
       if(e.message.includes("Invalid login"))
         setMsg("❌ Invalid email or password");
-      else if(e.message.includes("already registered"))
+      else if(e.message.includes("already"))
         setMsg("⚠️ User already exists");
       else
         setMsg("❌ " + e.message);
@@ -85,13 +87,22 @@ function Auth({ onAuth }) {
           onChange={e=>setEmail(e.target.value)}
         />
 
-        <input
-          type="password"
-          className="w-full border p-3 rounded-xl"
-          placeholder="Password"
-          value={pass}
-          onChange={e=>setPass(e.target.value)}
-        />
+        <div className="relative">
+          <input
+            type={show?"text":"password"}
+            className="w-full border p-3 rounded-xl pr-12"
+            placeholder="Password"
+            value={pass}
+            onChange={e=>setPass(e.target.value)}
+          />
+          <button
+            type="button"
+            onClick={()=>setShow(!show)}
+            className="absolute right-3 top-3 text-sm text-blue-600"
+          >
+            {show ? "Hide" : "Show"}
+          </button>
+        </div>
 
         {msg && (
           <div className="text-sm text-center text-gray-700">
@@ -104,7 +115,11 @@ function Auth({ onAuth }) {
           onClick={submit}
           className="w-full bg-blue-600 text-white p-3 rounded-xl disabled:opacity-60"
         >
-          {loading ? "Please wait..." : mode==="login" ? "Login" : "Create Account"}
+          {loading
+            ? "Please wait..."
+            : mode==="login"
+              ? "Login"
+              : "Create Account"}
         </button>
 
         <button
@@ -151,12 +166,12 @@ function Root(){
       setReady(true);
     });
 
-    const { data: listener } =
+    const { data } =
       supabase.auth.onAuthStateChange((_,session)=>{
         setUser(session?.user || null);
       });
 
-    return ()=>listener.subscription.unsubscribe();
+    return ()=>data.subscription.unsubscribe();
   },[]);
 
   if(!ready) return null;
