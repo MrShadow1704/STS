@@ -1,112 +1,214 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QA Navigator Pro</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; }
-        .modal-animate { animation: slideUp 0.3s ease-out; }
-        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>STS QAQC</title>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+<style>
+body { font-family: Inter, sans-serif; background:#f8fafc; }
+.fade { animation: fadeIn .3s ease; }
+@keyframes fadeIn { from{opacity:0; transform:scale(.95)} to{opacity:1} }
+</style>
 </head>
+
 <body>
-    <div id="root"></div>
+<div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+<script type="text/babel">
+const { useState, useEffect } = React;
 
-        // --- DATABASE CONFIG ---
-        const SB_URL = 'https://bbgcsddwzcrxwzczrojf.supabase.co';
-        const SB_KEY = 'sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f';
-        const supabase = window.supabase.createClient(SB_URL, SB_KEY);
+const supabase = supabaseJs.createClient(
+  "https://bbgcsddwzcrxwzczrojf.supabase.co",
+  "sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f"
+);
 
-        function App() {
-            const [systems, setSystems] = useState([]);
-            const [activeSys, setActiveSys] = useState(null);
-            const [notes, setNotes] = useState("");
-            const [filter, setFilter] = useState('all'); // all | pending | cleared
-            const [searchTerm, setSearchTerm] = useState('');
-            const [loading, setLoading] = useState(false);
+function App(){
+  const [user,setUser]=useState(null);
+  const [systems,setSystems]=useState([]);
+  const [search,setSearch]=useState("");
+  const [active,setActive]=useState(null);
+  const [notes,setNotes]=useState("");
+  const [photos,setPhotos]=useState([]);
 
-            useEffect(() => { loadData(); }, []);
+  useEffect(()=>{
+    supabase.auth.getUser().then(({data})=>{
+      if(data.user) setUser(data.user);
+    });
+  },[]);
 
-            const loadData = async () => {
-                const { data } = await supabase.from('systems').select('*').order('id');
-                setSystems(data || []);
-            };
+  useEffect(()=>{
+    if(user) loadSystems();
+  },[user]);
 
-            const filteredData = useMemo(() => {
-                return systems.filter(item => {
-                    const matchesSearch = item.id.toLowerCase().includes(searchTerm.toLowerCase());
-                    const isDone = item.notes || item.has_attachment;
-                    if (filter === 'pending') return matchesSearch && !isDone;
-                    if (filter === 'cleared') return matchesSearch && isDone;
-                    return matchesSearch;
-                });
-            }, [systems, filter, searchTerm]);
+  async function loadSystems(){
+    const {data}=await supabase.from("systems").select("*").order("id");
+    setSystems(data||[]);
+  }
 
-            const handleSave = async () => {
-                setLoading(true);
-                const file = document.getElementById('file-upload')?.files[0];
-                let hasAttach = activeSys.has_attachment;
+  async function saveSystem(){
+    const payload={
+      notes,
+      status: notes || photos.length ? "completed":"not_completed",
+      updated_at:new Date(),
+      updated_by:user.email
+    };
+    await supabase.from("systems").update(payload).eq("id",active.id);
+    localStorage.removeItem("draft-"+active.id);
+    loadSystems();
+    setActive(null);
+  }
 
-                if (file) {
-                    await supabase.storage.from('photos').upload(`${activeSys.id}.jpg`, file, { upsert: true });
-                    hasAttach = true;
-                }
+  useEffect(()=>{
+    if(active){
+      setNotes(
+        localStorage.getItem("draft-"+active.id) || active.notes || ""
+      );
+    }
+  },[active]);
 
-                await supabase.from('systems').update({ notes, has_attachment: hasAttach }).eq('id', activeSys.id);
-                setLoading(false);
-                setActiveSys(null);
-                loadData();
-            };
+  function handleDraft(v){
+    setNotes(v);
+    localStorage.setItem("draft-"+active.id,v);
+  }
 
-            return (
-                <div className="min-h-screen pb-20">
-                    {/* STICKY HEADER */}
-                    <nav className="bg-white/80 backdrop-blur-md border-b sticky top-0 z-20 px-6 py-4">
-                        <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-4 justify-between items-center">
-                            <div className="flex items-center gap-2">
-                                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
-                                    <span className="text-white font-extrabold text-xl">Q</span>
-                                </div>
-                                <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">NAVIGATOR</h1>
-                            </div>
+  async function uploadPhoto(e){
+    const f=e.target.files[0];
+    if(!f) return;
+    const path=`${active.id}/${Date.now()}_${f.name}`;
+    await supabase.storage.from("photos").upload(path,f);
+    loadPhotos();
+  }
 
-                            <div className="flex items-center gap-3 w-full md:w-auto">
-                                <input 
-                                    type="text" 
-                                    placeholder="Search System ID..." 
-                                    className="flex-1 md:w-64 px-4 py-2 bg-slate-100 rounded-xl outline-none border-2 border-transparent focus:border-indigo-500 transition-all text-sm"
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                />
-                                <button 
-                                    onClick={() => {
-                                        const id = prompt("New System ID:");
-                                        if(id) supabase.from('systems').insert([{id}]).then(loadData);
-                                    }}
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap"
-                                >
-                                    + Add Unit
-                                </button>
-                            </div>
-                        </div>
-                    </nav>
+  async function loadPhotos(){
+    const {data}=await supabase.storage.from("photos").list(active.id);
+    setPhotos(data||[]);
+  }
 
-                    {/* FILTER TABS */}
-                    <div className="max-w-6xl mx-auto px-6 mt-8">
-                        <div className="flex p-1 bg-slate-200 rounded-2xl w-fit">
-                            {['all', 'pending', 'cleared'].map(t => (
-                                <button 
-                                    key={t}
-                                    onClick={() => setFilter(t)}
-                                    className={`px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${filter === t ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                                >
-                                    {t
+  if(!user){
+    return <Auth setUser={setUser}/>
+  }
+
+  const filtered=systems.filter(s=>s.id.includes(search));
+
+  return (
+  <div className="flex h-screen">
+    <aside className="w-72 bg-white shadow-lg p-6 space-y-6 hidden md:block">
+      <h1 className="text-2xl font-bold text-indigo-600">STS QAQC</h1>
+      <p className="text-sm text-gray-500">Logged in as<br/>{user.email}</p>
+      <img src="https://illustrations.popsy.co/gray/work-from-home.svg"/>
+    </aside>
+
+    <main className="flex-1 p-6 overflow-y-auto">
+      <div className="flex gap-3 mb-6">
+        <input
+          className="flex-1 p-4 rounded-xl border"
+          placeholder="Search system"
+          value={search}
+          onChange={e=>setSearch(e.target.value)}
+        />
+        <button
+          onClick={()=>setSearch("")}
+          className="px-6 rounded-xl bg-red-500 text-white"
+        >Clear</button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {filtered.map(s=>(
+          <div
+            key={s.id}
+            onClick={()=>{setActive(s);loadPhotos()}}
+            className={`p-5 rounded-2xl shadow cursor-pointer transition
+            ${s.status==="completed"?"bg-green-100":"bg-red-100"}`}
+          >
+            <h3 className="font-bold">System #{s.id}</h3>
+            <p className="text-xs mt-2">
+              {s.updated_by}<br/>
+              {s.updated_at && new Date(s.updated_at).toLocaleString()}
+            </p>
+          </div>
+        ))}
+      </div>
+    </main>
+
+    {active && (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center fade">
+      <div className="bg-white w-full max-w-3xl rounded-3xl p-8 space-y-4">
+        <h2 className="text-2xl font-bold">System #{active.id}</h2>
+
+        <textarea
+          className="w-full h-40 p-4 border rounded-xl"
+          value={notes}
+          onChange={e=>handleDraft(e.target.value)}
+        />
+
+        <input
+          type="file"
+          accept="image/*"
+          capture={/Mobi/.test(navigator.userAgent) ? "environment":undefined}
+          onChange={uploadPhoto}
+        />
+
+        <div className="grid grid-cols-3 gap-3">
+          {photos.map(p=>{
+            const url=supabase.storage.from("photos")
+              .getPublicUrl(`${active.id}/${p.name}`).data.publicUrl;
+            return(
+              <div key={p.name}>
+                <img src={url} className="rounded-xl h-28 w-full object-cover"/>
+                <a href={url} target="_blank"
+                   className="block text-center mt-1 text-blue-600">Download</a>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <button onClick={()=>setActive(null)}>Cancel</button>
+          <button onClick={saveSystem}
+            className="px-6 py-2 bg-indigo-600 text-white rounded-xl">
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+    )}
+  </div>
+  );
+}
+
+function Auth({setUser}){
+  const [email,setEmail]=useState("");
+  const [pass,setPass]=useState("");
+  return(
+    <div className="h-screen flex items-center justify-center">
+      <div className="bg-white p-10 rounded-3xl shadow-xl w-96 space-y-4">
+        <h2 className="text-2xl font-bold text-center">STS Login</h2>
+        <input className="w-full p-3 border rounded"
+          placeholder="Email" onChange={e=>setEmail(e.target.value)}/>
+        <input type="password" className="w-full p-3 border rounded"
+          placeholder="Password" onChange={e=>setPass(e.target.value)}/>
+        <button className="w-full bg-indigo-600 text-white p-3 rounded"
+          onClick={async()=>{
+            const {data}=await supabase.auth.signInWithPassword({email, password:pass});
+            if(data.user) setUser(data.user);
+          }}>Login</button>
+        <button className="w-full border p-3 rounded"
+          onClick={()=>supabase.auth.signUp({email,password:pass})}>
+          Sign Up
+        </button>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
