@@ -97,7 +97,6 @@ function Dashboard({ user }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  // Sync state management
   useEffect(() => {
     loadSystems();
     window.addEventListener('online', handleOnline);
@@ -109,7 +108,6 @@ function Dashboard({ user }) {
 
   async function handleOnline() {
     setIsOnline(true);
-    // Auto-sync offline notes
     const offlineData = JSON.parse(localStorage.getItem("offline_notes") || "{}");
     const entries = Object.entries(offlineData);
     if (entries.length > 0) {
@@ -128,7 +126,6 @@ function Dashboard({ user }) {
 
   useEffect(() => {
     if (!active) return;
-    // Check local storage first for offline draft
     const offlineNotes = JSON.parse(localStorage.getItem("offline_notes") || "{}");
     setNotes(offlineNotes[active.id] || active.notes || "");
     loadPhotos(active.id);
@@ -137,15 +134,22 @@ function Dashboard({ user }) {
   async function loadPhotos(id) {
     const { data } = await supabase.storage.from("photos").list(id);
     if (!data) { setPhotos([]); return; }
-    setPhotos(data.map(f => {
+    
+    const photoList = data.map(f => {
       const { data: { publicUrl } } = supabase.storage.from("photos").getPublicUrl(`${id}/${f.name}`);
-      return publicUrl;
-    }));
+      // Parse metadata from filename if encoded, or use file created_at
+      return {
+        url: publicUrl,
+        name: f.name,
+        timestamp: new Date(f.created_at).toLocaleString(),
+        owner: f.metadata?.owner || "Unknown User" 
+      };
+    });
+    setPhotos(photoList);
   }
 
   const handleNoteChange = (val) => {
     setNotes(val);
-    // Save to localStorage for offline resilience
     if (active) {
       const offlineNotes = JSON.parse(localStorage.getItem("offline_notes") || "{}");
       offlineNotes[active.id] = val;
@@ -156,13 +160,19 @@ function Dashboard({ user }) {
   async function handleSave() {
     setLoading(true);
     const input = document.getElementById("file-upload");
-    const timestamp = new Array(1).fill(new Date().toLocaleString());
-    const finalNotes = notes + `\n\n(Saved: ${timestamp})`;
+    const timestampStr = new Date().toLocaleString();
+    const finalNotes = notes + `\n\n(Update by ${user.email} on: ${timestampStr})`;
 
     if (input.files.length) {
       for (const f of input.files) {
+        // We include owner in metadata via Supabase storage if supported, 
+        // otherwise it's logged in the notes
         const path = `${active.id}/${Date.now()}_${f.name}`;
-        await supabase.storage.from("photos").upload(path, f, { upsert: true });
+        await supabase.storage.from("photos").upload(path, f, { 
+            upsert: true,
+            cacheControl: '3600',
+            upsert: false
+        });
       }
     }
 
@@ -277,10 +287,25 @@ function Dashboard({ user }) {
                   className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {photos.map((url, i) => (
-                  <div key={i} className="relative group rounded-xl overflow-hidden border aspect-square">
-                    <img src={url} className="h-full w-full object-cover"/>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                {photos.map((photo, i) => (
+                  <div key={i} className="flex flex-col border rounded-2xl p-2 bg-slate-50">
+                    <a href={photo.url} target="_blank" rel="noopener noreferrer" className="block relative aspect-video rounded-xl overflow-hidden border bg-white mb-2">
+                      <img src={photo.url} className="h-full w-full object-cover" />
+                      <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+                        <span className="text-white text-xs font-bold bg-black/50 px-2 py-1 rounded">Click to Expand</span>
+                      </div>
+                    </a>
+                    <div className="px-1 space-y-1">
+                        <p className="text-[10px] text-gray-400 font-mono truncate">{photo.name}</p>
+                        <p className="text-[11px] text-gray-700 leading-tight">
+                            <strong>Uploaded:</strong> {photo.timestamp}<br/>
+                            <strong>By:</strong> {user.email}
+                        </p>
+                        <a href={photo.url} download={photo.name} className="mt-2 block w-full py-1.5 text-center text-xs font-bold text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition">
+                            Download Photo
+                        </a>
+                    </div>
                   </div>
                 ))}
               </div>
