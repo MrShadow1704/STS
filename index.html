@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>STS QAQC - Pro</title>
+<title>STS QAQC</title>
 
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -12,15 +12,14 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
 <style>
-  body { font-family: 'Inter', sans-serif; background:#f1f5f9; overflow-x: hidden; }
-  .popup-anim { animation: popup .4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-  @keyframes popup {
-    from { opacity:0; transform:scale(0.8) translateY(20px); }
-    to { opacity:1; transform:scale(1) translateY(0); }
-  }
-  .sidebar-transition { transition: transform 0.3s ease-in-out; }
-  /* Hide scrollbar but keep functionality */
-  .no-scrollbar::-webkit-scrollbar { display: none; }
+body { font-family: Inter, sans-serif; background:#f8fafc; overflow-x: hidden; }
+.fade-in { animation: fadeIn .25s ease-out; }
+@keyframes fadeIn {
+  from { opacity:0; transform:scale(.95); }
+  to { opacity:1; transform:scale(1); }
+}
+.sidebarBtn { width: 100%; text-align: left; padding: 0.75rem 1rem; border-radius: 0.75rem; transition: all 0.2s; }
+.sidebarBtn:hover { background: #eff6ff; color: #2563eb; }
 </style>
 </head>
 
@@ -45,11 +44,13 @@ function Auth({ onAuth }) {
 
   async function submit() {
     setMsg(""); setLoading(true);
+    if (!email || !pass) { setMsg("❌ Enter email and password"); setLoading(false); return; }
     try {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password: pass });
         if (error) throw error;
-        setMsg("✅ Success! You can login now."); setMode("login");
+        setMsg("✅ Account created. Check email or login.");
+        setMode("login");
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
         if (error) throw error;
@@ -61,19 +62,21 @@ function Auth({ onAuth }) {
 
   return (
     <div className="h-screen flex items-center justify-center bg-slate-100 p-4">
-      <div className="bg-white w-full max-w-md p-8 rounded-[2rem] shadow-2xl popup-anim space-y-4">
-        <h1 className="text-3xl font-black text-center text-blue-600">STS QAQC</h1>
-        <input className="w-full border p-4 rounded-2xl" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} />
+      <div className="bg-white w-full max-w-md p-8 rounded-3xl shadow-xl fade-in space-y-4">
+        <h1 className="text-2xl font-bold text-center text-blue-600">STS QAQC</h1>
+        <input className="w-full border p-3 rounded-xl" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <div className="relative">
-          <input type={show ? "text" : "password"} className="w-full border p-4 rounded-2xl" placeholder="Password" value={pass} onChange={e=>setPass(e.target.value)} />
-          <button onClick={() => setShow(!show)} className="absolute right-4 top-4 text-gray-400">{show ? "🙈" : "👁️"}</button>
+          <input type={show ? "text" : "password"} className="w-full border p-3 rounded-xl pr-12" placeholder="Password" value={pass} onChange={(e) => setPass(e.target.value)} />
+          <button type="button" onClick={() => setShow(!show)} className="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-500">
+            {show ? "🙈" : "👁️"}
+          </button>
         </div>
-        {msg && <p className="text-center text-sm font-medium">{msg}</p>}
-        <button disabled={loading} onClick={submit} className="w-full bg-blue-600 text-white p-4 rounded-2xl font-bold shadow-lg shadow-blue-200">
-          {loading ? "Processing..." : mode === "login" ? "Sign In" : "Register"}
+        {msg && <div className="text-sm text-center text-gray-700">{msg}</div>}
+        <button disabled={loading} onClick={submit} className="w-full bg-blue-600 text-white p-3 rounded-xl disabled:opacity-60 font-bold">
+          {loading ? "Please wait..." : mode === "login" ? "Login" : "Create Account"}
         </button>
-        <button onClick={() => setMode(mode === "login" ? "signup" : "login")} className="w-full text-blue-500 text-sm">
-          {mode === "login" ? "Need an account? Sign Up" : "Back to Login"}
+        <button type="button" onClick={() => setMode(mode === "login" ? "signup" : "login")} className="w-full text-sm text-blue-600">
+          {mode === "login" ? "New user? Create account" : "Already have an account? Login"}
         </button>
       </div>
     </div>
@@ -94,213 +97,199 @@ function Dashboard({ user }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  // Sync state with LocalStorage for offline drafts
+  // Sync state management
   useEffect(() => {
-    if (active) {
-      const draft = localStorage.getItem(`draft_${active.id}`);
-      setNotes(draft || active.notes || "");
-    }
-  }, [active]);
-
-  useEffect(() => {
-    if (active) localStorage.setItem(`draft_${active.id}`, notes);
-  }, [notes]);
-
-  // Online/Offline detection & Auto-sync
-  useEffect(() => {
-    const handleStatus = () => {
-      setIsOnline(navigator.onLine);
-      if (navigator.onLine) {
-        console.log("Back online: Syncing...");
-        loadSystems();
-      }
-    };
-    window.addEventListener('online', handleStatus);
-    window.addEventListener('offline', handleStatus);
     loadSystems();
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', () => setIsOnline(false));
     return () => {
-      window.removeEventListener('online', handleStatus);
-      window.removeEventListener('offline', handleStatus);
+      window.removeEventListener('online', handleOnline);
     };
   }, []);
+
+  async function handleOnline() {
+    setIsOnline(true);
+    // Auto-sync offline notes
+    const offlineData = JSON.parse(localStorage.getItem("offline_notes") || "{}");
+    const entries = Object.entries(offlineData);
+    if (entries.length > 0) {
+      for (const [id, noteContent] of entries) {
+        await supabase.from("systems").update({ notes: noteContent }).eq("id", id);
+      }
+      localStorage.removeItem("offline_notes");
+      loadSystems();
+    }
+  }
 
   async function loadSystems() {
     const { data } = await supabase.from("systems").select("*").order("id");
     setSystems(data || []);
   }
 
+  useEffect(() => {
+    if (!active) return;
+    // Check local storage first for offline draft
+    const offlineNotes = JSON.parse(localStorage.getItem("offline_notes") || "{}");
+    setNotes(offlineNotes[active.id] || active.notes || "");
+    loadPhotos(active.id);
+  }, [active]);
+
   async function loadPhotos(id) {
     const { data } = await supabase.storage.from("photos").list(id);
     if (!data) { setPhotos([]); return; }
-    const urls = data.map(f => supabase.storage.from("photos").getPublicUrl(`${id}/${f.name}`).data.publicUrl);
-    setPhotos(urls);
+    setPhotos(data.map(f => {
+      const { data: { publicUrl } } = supabase.storage.from("photos").getPublicUrl(`${id}/${f.name}`);
+      return publicUrl;
+    }));
   }
 
-  useEffect(() => { if (active) loadPhotos(active.id); }, [active]);
+  const handleNoteChange = (val) => {
+    setNotes(val);
+    // Save to localStorage for offline resilience
+    if (active) {
+      const offlineNotes = JSON.parse(localStorage.getItem("offline_notes") || "{}");
+      offlineNotes[active.id] = val;
+      localStorage.setItem("offline_notes", JSON.stringify(offlineNotes));
+    }
+  };
 
   async function handleSave() {
-    if (!isOnline) {
-      alert("Working Offline: Changes saved to local draft. They will sync when internet returns.");
-      return;
-    }
     setLoading(true);
     const input = document.getElementById("file-upload");
-    const timestamp = new Date().toLocaleString();
-    const updatedNotes = notes + `\n[Saved: ${timestamp}]`;
+    const timestamp = new Array(1).fill(new Date().toLocaleString());
+    const finalNotes = notes + `\n\n(Saved: ${timestamp})`;
 
     if (input.files.length) {
       for (const f of input.files) {
         const path = `${active.id}/${Date.now()}_${f.name}`;
-        await supabase.storage.from("photos").upload(path, f);
+        await supabase.storage.from("photos").upload(path, f, { upsert: true });
       }
     }
 
-    await supabase.from("systems").update({ notes: updatedNotes, status: "completed" }).eq("id", active.id);
-    
-    localStorage.removeItem(`draft_${active.id}`); // Clear draft after successful sync
-    setNotes(updatedNotes);
+    const { error } = await supabase.from("systems")
+      .update({ notes: finalNotes, status: "completed" })
+      .eq("id", active.id);
+
+    if (!error) {
+      const offlineNotes = JSON.parse(localStorage.getItem("offline_notes") || "{}");
+      delete offlineNotes[active.id];
+      localStorage.setItem("offline_notes", JSON.stringify(offlineNotes));
+    }
+
     input.value = "";
-    loadPhotos(active.id);
+    setActive(null);
     loadSystems();
     setLoading(false);
   }
 
-  async function downloadImage(url) {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    const blobUrl = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = `photo-${Date.now()}.jpg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  async function createSystem() {
+    if (!newId.trim()) return;
+    await supabase.from("systems").insert([{ id: newId.trim(), notes: "", status: "not_completed" }]);
+    setNewId(""); setShowAdd(false); loadSystems();
   }
 
-  const filtered = systems.filter(s => 
-    s.id.toLowerCase().includes(search.toLowerCase()) && (filter === "all" || s.status === filter)
+  const filtered = systems.filter(s =>
+    s.id.toLowerCase().includes(search.toLowerCase()) &&
+    (filter === "all" || s.status === filter)
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
+    <div className="flex h-screen overflow-hidden relative">
+      
       {/* MOBILE HEADER */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b p-4 flex justify-between items-center z-50">
+      <div className="lg:hidden absolute top-0 left-0 right-0 bg-white border-b p-4 flex justify-between items-center z-20">
         <h1 className="font-bold text-blue-600">STS QAQC</h1>
-        <button onClick={() => setSidebarOpen(true)} className="text-2xl">☰</button>
+        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-2xl">☰</button>
       </div>
 
       {/* SIDEBAR */}
-      <div className={`fixed inset-y-0 left-0 z-[60] w-72 bg-white border-r transform ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:static sidebar-transition flex flex-col shadow-xl lg:shadow-none`}>
-        <div className="p-6 flex flex-col h-full">
-          <div className="flex justify-between items-center lg:block mb-8">
-             <h1 className="text-2xl font-black text-blue-600">STS QAQC</h1>
-             <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-gray-400 text-2xl">✕</button>
-          </div>
-
-          <div className="mb-6 p-4 bg-blue-50 rounded-2xl">
-            <p className="text-xs text-blue-400 font-bold uppercase tracking-wider">User</p>
-            <p className="text-sm font-medium truncate text-blue-900">{user?.email}</p>
-            <div className={`mt-2 inline-flex items-center text-[10px] px-2 py-0.5 rounded-full ${isOnline ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
-               {isOnline ? "● Online" : "● Offline Mode"}
-            </div>
-          </div>
-
-          <button onClick={() => { setShowAdd(true); setSidebarOpen(false); }} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold mb-6 hover:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-100">
-            + Add New System
-          </button>
-
-          <nav className="space-y-2 flex-1">
-            <button onClick={() => setFilter("all")} className={`w-full text-left p-4 rounded-xl flex items-center gap-3 ${filter==='all'?'bg-slate-100 font-bold text-blue-600':'text-gray-500'}`}>📁 All Systems</button>
-            <button onClick={() => setFilter("completed")} className={`w-full text-left p-4 rounded-xl flex items-center gap-3 ${filter==='completed'?'bg-slate-100 font-bold text-green-600':'text-gray-500'}`}>✅ Completed</button>
-            <button onClick={() => setFilter("not_completed")} className={`w-full text-left p-4 rounded-xl flex items-center gap-3 ${filter==='not_completed'?'bg-slate-100 font-bold text-red-600':'text-gray-500'}`}>❌ Pending</button>
-          </nav>
-
-          <button onClick={() => supabase.auth.signOut()} className="mt-auto w-full p-4 text-left text-red-500 font-bold border-t flex items-center gap-2 hover:bg-red-50 transition-colors">
-            <span>🚪</span> Log Out
-          </button>
+      <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 fixed lg:relative z-30 w-72 h-full bg-white border-r p-6 flex flex-col`}>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-blue-600">STS QAQC</h1>
+          <p className="text-xs text-gray-500 break-all">{user?.email}</p>
+          {!isOnline && <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-bold">OFFLINE MODE</span>}
         </div>
+
+        <button onClick={() => {setShowAdd(true); setSidebarOpen(false);}} className="bg-blue-600 text-white py-3 rounded-2xl font-semibold mb-6 shadow-lg shadow-blue-200 hover:bg-blue-700 transition">
+          + Add System
+        </button>
+
+        <div className="flex flex-col gap-2 flex-1">
+          <button onClick={() => {setFilter("all"); setSidebarOpen(false);}} className="sidebarBtn">📁 All Systems</button>
+          <button onClick={() => {setFilter("completed"); setSidebarOpen(false);}} className="sidebarBtn">✅ Completed</button>
+          <button onClick={() => {setFilter("not_completed"); setSidebarOpen(false);}} className="sidebarBtn">❌ Not Completed</button>
+        </div>
+
+        <div className="mt-4 p-4 rounded-2xl bg-slate-50 border text-xs text-gray-500 mb-4">
+          <p className="font-bold text-blue-800 mb-1">Status</p>
+          <p>• Offline drafts enabled</p>
+          <p>• Auto-sync on connection</p>
+        </div>
+
+        <button onClick={() => supabase.auth.signOut()} className="w-full py-3 border border-red-200 text-red-600 rounded-xl font-bold hover:bg-red-50 transition">
+          Logout
+        </button>
       </div>
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 overflow-y-auto p-4 lg:p-10 mt-16 lg:mt-0 no-scrollbar">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row gap-4 mb-8">
-            <div className="relative flex-1">
-              <input className="w-full bg-white border-0 shadow-sm p-4 pl-12 rounded-2xl focus:ring-2 ring-blue-500" placeholder="Search system ID..." value={search} onChange={e=>setSearch(e.target.value)} />
-              <span className="absolute left-4 top-4 opacity-30">🔍</span>
-              {search && (
-                <button onClick={() => setSearch("")} className="absolute right-4 top-4 bg-gray-100 hover:bg-gray-200 rounded-full w-6 h-6 flex items-center justify-center text-xs">✕</button>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filtered.map(s => (
-              <div key={s.id} onClick={() => setActive(s)} className="bg-white p-6 rounded-[2rem] shadow-sm hover:shadow-md transition-all cursor-pointer border-2 border-transparent hover:border-blue-200 group">
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="font-black text-xl text-slate-800">#{s.id}</h3>
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${s.status === "completed" ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"}`}>
-                    {s.status === "completed" ? "Verified" : "Pending"}
-                  </span>
-                </div>
-                <p className="text-slate-400 text-sm line-clamp-2">{s.notes || "No notes yet..."}</p>
-                <div className="mt-4 flex items-center text-blue-600 text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity">
-                  Open Details →
-                </div>
-              </div>
-            ))}
+      <div className="flex-1 p-6 lg:p-10 overflow-y-auto mt-14 lg:mt-0">
+        <div className="flex flex-wrap gap-4 mb-8">
+          <div className="relative flex-1 min-w-[280px]">
+            <input className="w-full border p-4 rounded-2xl pr-12" placeholder="Search system ID..." value={search} onChange={e => setSearch(e.target.value)} />
+            {search && (
+              <button onClick={() => setSearch("")} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">✕</button>
+            )}
           </div>
         </div>
-      </main>
 
-      {/* SYSTEM MODAL (THE BIGGER POPUP) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filtered.map(s => (
+            <div key={s.id} onClick={() => setActive(s)}
+              className={`cursor-pointer p-6 rounded-3xl border shadow-sm hover:shadow-md transition-all active:scale-95
+              ${s.status === "completed" ? "bg-green-50 border-green-200" : "bg-white border-slate-200"}`}>
+              <h3 className="font-bold text-lg">System #{s.id}</h3>
+              <p className="mt-2 text-sm font-medium">
+                {s.status === "completed" ? "🟢 Completed" : "⚪ Pending"}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* SYSTEM MODAL */}
       {active && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setActive(null)}></div>
-          <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-[2.5rem] shadow-2xl flex flex-col popup-anim relative overflow-hidden">
-            <div className="p-8 bg-gradient-to-r from-blue-600 to-indigo-700 text-white flex justify-between items-center">
-              <div>
-                <h2 className="text-3xl font-black">System #{active.id}</h2>
-                <p className="opacity-80">Full Inspection Documentation</p>
-              </div>
-              <button onClick={() => setActive(null)} className="bg-white/20 hover:bg-white/30 w-12 h-12 rounded-2xl flex items-center justify-center text-2xl">✕</button>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-40 p-4">
+          <div className="bg-white w-full max-w-2xl rounded-[32px] overflow-hidden shadow-2xl fade-in flex flex-col max-h-[90vh]">
+            <div className="bg-blue-600 text-white p-6">
+              <h2 className="text-xl font-bold">System #{active.id}</h2>
+              <p className="text-sm opacity-80">Documentation & Camera Upload</p>
             </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+              <label className="block text-sm font-bold text-gray-700">Inspection Notes</label>
+              <textarea value={notes} onChange={e => handleNoteChange(e.target.value)}
+                className="w-full border p-4 rounded-2xl h-32 focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="Type notes here... (Saved locally automatically)"/>
 
-            <div className="flex-1 overflow-y-auto p-8 no-scrollbar">
-              <div className="grid lg:grid-cols-2 gap-8">
-                <div>
-                  <label className="block text-sm font-bold text-slate-500 mb-2 uppercase tracking-widest">Inspection Notes</label>
-                  <textarea value={notes} onChange={e => setNotes(e.target.value)} className="w-full h-64 border-2 border-slate-100 rounded-3xl p-6 focus:border-blue-500 outline-none transition-colors" placeholder="Start typing inspection details here..." />
-                </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-gray-700">Photos</label>
+                <input id="file-upload" type="file" accept="image/*" capture="camera" multiple 
+                  className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+              </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-slate-500 mb-2 uppercase tracking-widest">Photo Gallery</label>
-                  <div className="bg-slate-50 rounded-3xl p-6 min-h-[16rem]">
-                    <div className="grid grid-cols-2 gap-4">
-                      {photos.map((url, i) => (
-                        <div key={i} className="relative group rounded-2xl overflow-hidden shadow-sm">
-                          <img src={url} className="h-32 w-full object-cover" />
-                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity">
-                            <button onClick={() => downloadImage(url)} className="p-2 bg-white rounded-lg text-xs font-bold">⬇ Download</button>
-                          </div>
-                        </div>
-                      ))}
-                      <label className="h-32 border-2 border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-white transition-colors">
-                        <span className="text-2xl">📸</span>
-                        <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase">Upload</span>
-                        {/* Note: 'capture' attribute triggers mobile camera */}
-                        <input id="file-upload" type="file" multiple accept="image/*" capture="environment" className="hidden" />
-                      </label>
-                    </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {photos.map((url, i) => (
+                  <div key={i} className="relative group rounded-xl overflow-hidden border aspect-square">
+                    <img src={url} className="h-full w-full object-cover"/>
                   </div>
-                </div>
+                ))}
               </div>
             </div>
 
-            <div className="p-8 border-t bg-slate-50 flex flex-col sm:flex-row justify-end gap-4">
-              <button onClick={() => setActive(null)} className="px-8 py-4 font-bold text-slate-500">Cancel</button>
-              <button onClick={handleSave} disabled={loading} className="px-12 py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-200 active:scale-95 transition-all">
-                {loading ? "Syncing..." : "Save & Mark Completed"}
+            <div className="p-6 border-t flex gap-3">
+              <button onClick={() => setActive(null)} className="flex-1 py-3 font-bold text-gray-500 bg-gray-100 rounded-2xl">Close</button>
+              <button onClick={handleSave} disabled={loading} className="flex-[2] py-3 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-100">
+                {loading ? "Syncing..." : "Save & Complete"}
               </button>
             </div>
           </div>
@@ -309,43 +298,41 @@ function Dashboard({ user }) {
 
       {/* ADD SYSTEM MODAL */}
       {showAdd && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40" onClick={() => setShowAdd(false)}></div>
-          <div className="bg-white w-full max-w-sm rounded-[2rem] p-8 shadow-2xl popup-anim relative">
-            <h2 className="text-2xl font-black mb-6">New System</h2>
-            <input autoFocus value={newId} onChange={e => setNewId(e.target.value)} className="w-full border-2 border-slate-100 p-4 rounded-2xl mb-6 focus:border-blue-500 outline-none" placeholder="Enter System Number..." />
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl fade-in">
+            <h2 className="text-xl font-bold mb-4 text-center">New Inspection</h2>
+            <input value={newId} onChange={e => setNewId(e.target.value)}
+              className="w-full border p-4 rounded-2xl mb-6 text-center text-lg font-bold"
+              placeholder="System ID #"/>
             <div className="flex gap-3">
-              <button onClick={() => setShowAdd(false)} className="flex-1 py-4 font-bold text-slate-400">Cancel</button>
-              <button onClick={async () => {
-                if(!newId) return;
-                await supabase.from("systems").insert([{ id: newId, status: "not_completed", notes: "" }]);
-                setNewId(""); setShowAdd(false); loadSystems();
-              }} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold">Create</button>
+              <button onClick={() => setShowAdd(false)} className="flex-1 py-3 border rounded-2xl">Cancel</button>
+              <button onClick={createSystem} className="flex-1 py-3 bg-blue-600 text-white rounded-2xl font-bold">Add</button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }
 
-/* ============= ROOT ============= */
-function Root(){
+/* ============= ROOT WRAPPER ============= */
+function Root() {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+    supabase.auth.getUser().then(res => {
+      setUser(res.data.user);
       setReady(true);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    const { data: sub } = supabase.auth.onAuthStateChange((_, session) => {
+      setUser(session?.user || null);
     });
-    return () => subscription.unsubscribe();
+    return () => sub.subscription.unsubscribe();
   }, []);
 
-  if (!ready) return <div className="h-screen flex items-center justify-center">Loading...</div>;
+  if (!ready) return null;
   return user ? <Dashboard user={user} /> : <Auth onAuth={setUser} />;
 }
 
