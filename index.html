@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>STS QAQC</title>
 
-<link rel="manifest" href="manifest.json">
-
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -14,8 +12,7 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
 <style>
-body { font-family: Inter, sans-serif; background:#f8fafc; }
-.fade { animation: fade .25s ease; }
+.fade { animation: fade .3s ease; }
 @keyframes fade {
   from { opacity:0; transform:scale(.95); }
   to { opacity:1; transform:scale(1); }
@@ -23,19 +20,67 @@ body { font-family: Inter, sans-serif; background:#f8fafc; }
 </style>
 </head>
 
-<body>
+<body class="bg-slate-100">
 <div id="root"></div>
 
 <script type="text/babel">
 const { useState, useEffect } = React;
 
 const supabase = window.supabase.createClient(
-  "https://bbgcsddwzcrxwzczrojf.supabase.co",
-  "sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f"
+  "SUPABASE_URL",
+  "SUPABASE_ANON_KEY"
 );
 
-function App(){
-  const [user,setUser]=useState(null);
+/* ================= AUTH ================= */
+function Auth({ onAuth }) {
+  const [email,setEmail]=useState("");
+  const [pass,setPass]=useState("");
+  const [isSignup,setIsSignup]=useState(false);
+  const [error,setError]=useState("");
+
+  async function submit(){
+    setError("");
+    const fn = isSignup
+      ? supabase.auth.signUp
+      : supabase.auth.signInWithPassword;
+
+    const { data, error } = await fn({ email, password: pass });
+    if(error) setError(error.message);
+    if(data?.user) onAuth(data.user);
+  }
+
+  return (
+    <div className="h-screen flex items-center justify-center">
+      <div className="bg-white p-8 w-96 rounded-3xl shadow-xl space-y-4 fade">
+        <h1 className="text-2xl font-bold text-center text-blue-600">
+          STS QAQC
+        </h1>
+
+        <input className="w-full border p-3 rounded-xl"
+          placeholder="Email" onChange={e=>setEmail(e.target.value)} />
+
+        <input type="password" className="w-full border p-3 rounded-xl"
+          placeholder="Password" onChange={e=>setPass(e.target.value)} />
+
+        {error && <div className="text-red-600 text-sm">{error}</div>}
+
+        <button onClick={submit}
+          className="w-full bg-blue-600 text-white p-3 rounded-xl">
+          {isSignup ? "Create Account" : "Login"}
+        </button>
+
+        <button onClick={()=>setIsSignup(!isSignup)}
+          className="w-full text-sm text-blue-600">
+          {isSignup ? "Already have an account? Login"
+                    : "New user? Create account"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ================= APP ================= */
+function App({ user }) {
   const [systems,setSystems]=useState([]);
   const [active,setActive]=useState(null);
   const [notes,setNotes]=useState("");
@@ -43,169 +88,135 @@ function App(){
   const [search,setSearch]=useState("");
   const [showAdd,setShowAdd]=useState(false);
   const [newId,setNewId]=useState("");
-  const [saving,setSaving]=useState(false);
 
-  useEffect(()=>{
-    supabase.auth.getUser().then(({data})=>{
-      if(data.user) setUser(data.user);
-    });
-  },[]);
-
-  useEffect(()=>{
-    if(user) loadSystems();
-  },[user]);
-
-  async function loadSystems(){
-    const {data}=await supabase.from("systems").select("*").order("id");
+  useEffect(()=>{ load(); },[]);
+  async function load(){
+    const { data } = await supabase.from("systems").select("*").order("id");
     setSystems(data||[]);
   }
 
   useEffect(()=>{
-    if(!active) return;
-    setNotes(
-      localStorage.getItem("draft-"+active.id) || active.notes || ""
-    );
-    loadPhotos(active.id);
+    if(active){
+      const draft = localStorage.getItem("draft_"+active.id);
+      setNotes(draft ?? active.notes ?? "");
+      loadPhotos(active.id);
+    }
   },[active]);
 
-  async function loadPhotos(id){
-    const {data}=await supabase.storage.from("photos").list(id);
-    if(!data){ setPhotos([]); return; }
-    setPhotos(data.map(f =>
-      supabase.storage.from("photos")
-        .getPublicUrl(`${id}/${f.name}`).data.publicUrl
-    ));
+  function saveDraft(v){
+    setNotes(v);
+    active && localStorage.setItem("draft_"+active.id,v);
   }
 
-  async function saveSystem(){
-    setSaving(true);
-
-    const input=document.getElementById("file-upload");
-    if(navigator.onLine && input.files.length){
-      for(const f of input.files){
-        await supabase.storage.from("photos")
-          .upload(`${active.id}/${Date.now()}_${f.name}`,f,{upsert:true});
-      }
-    }
-
+  async function save(){
     await supabase.from("systems").update({
       notes,
-      status: notes || photos.length ? "completed":"not_completed",
-      updated_at:new Date(),
-      updated_by:user.email
+      status:"completed",
+      updated_by:user.email,
+      updated_at:new Date()
     }).eq("id",active.id);
 
-    localStorage.removeItem("draft-"+active.id);
-    input.value="";
-    await loadSystems();
-    setSaving(false);
+    localStorage.removeItem("draft_"+active.id);
+    load();
+    setActive(null);
   }
 
-  async function createSystem(){
-    const id=newId.trim();
-    if(!id) return;
-    const {error}=await supabase.from("systems")
-      .insert([{id,notes:"",status:"not_completed"}]);
-    if(error){ alert("System already exists"); return; }
-    setNewId(""); setShowAdd(false); loadSystems();
+  async function loadPhotos(id){
+    const { data } = await supabase.storage.from("photos").list(id);
+    setPhotos((data||[]).map(f =>
+      supabase.storage.from("photos")
+      .getPublicUrl(`${id}/${f.name}`).data.publicUrl));
   }
 
-  if(!user){
-    return <Auth setUser={setUser}/>
+  async function upload(e){
+    const file=e.target.files[0];
+    if(!file) return;
+    const path=`${active.id}/${Date.now()}_${file.name}`;
+    await supabase.storage.from("photos").upload(path,file);
+    loadPhotos(active.id);
   }
 
-  const filtered=systems.filter(s =>
-    s.id.toLowerCase().includes(search.toLowerCase())
-  );
+  async function addSystem(){
+    await supabase.from("systems").insert({
+      id:newId,status:"not_completed"
+    });
+    setShowAdd(false); setNewId(""); load();
+  }
+
+  const list=systems.filter(s=>s.id.includes(search));
 
   return (
   <div className="flex h-screen">
-    <aside className="w-72 bg-white border-r p-6 hidden md:flex flex-col">
-      <h1 className="text-2xl font-bold text-blue-600">STS QAQC</h1>
-      <p className="text-sm text-gray-500 mb-6">{user.email}</p>
+    <aside className="w-72 bg-white p-6 space-y-4">
+      <h2 className="text-xl font-bold text-blue-600">Systems</h2>
+      <input className="w-full border p-2 rounded-xl"
+        placeholder="Search"
+        value={search}
+        onChange={e=>setSearch(e.target.value)} />
+      <button onClick={()=>setSearch("")}
+        className="w-full border rounded-xl p-2">
+        Clear
+      </button>
       <button onClick={()=>setShowAdd(true)}
-        className="bg-blue-600 text-white py-3 rounded-xl mb-6">
+        className="w-full bg-blue-600 text-white p-3 rounded-xl">
         + Add System
       </button>
-      <div className="mt-auto text-sm bg-blue-100 p-4 rounded-xl">
-        Offline drafts enabled
-      </div>
     </aside>
 
-    <main className="flex-1 p-6 overflow-y-auto">
-      <div className="flex gap-3 mb-6">
-        <input
-          className="flex-1 border p-4 rounded-xl"
-          placeholder="Search system..."
-          value={search}
-          onChange={e=>setSearch(e.target.value)}
-        />
-        <button
-          onClick={()=>setSearch("")}
-          className="bg-red-500 text-white px-6 rounded-xl">
-          Clear
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {filtered.map(s=>(
-          <div key={s.id} onClick={()=>setActive(s)}
-            className={`p-5 rounded-xl cursor-pointer border
-            ${s.status==="completed"?"bg-green-50 border-green-500":"bg-red-50 border-red-400"}`}>
-            <h3 className="font-bold">System #{s.id}</h3>
-            <p className="text-xs mt-2">
-              {s.updated_by}<br/>
-              {s.updated_at && new Date(s.updated_at).toLocaleString()}
-            </p>
-          </div>
-        ))}
-      </div>
+    <main className="flex-1 p-8 overflow-auto grid grid-cols-2 md:grid-cols-4 gap-4">
+      {list.map(s=>(
+        <div key={s.id} onClick={()=>setActive(s)}
+          className={`p-5 rounded-2xl cursor-pointer shadow
+          ${s.status==="completed"?"bg-green-100":"bg-red-100"}`}>
+          <div className="font-bold">#{s.id}</div>
+          <div className="text-xs">{s.updated_by}</div>
+        </div>
+      ))}
     </main>
 
-    {active&&(
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center fade">
-      <div className="bg-white w-full max-w-3xl p-8 rounded-3xl">
-        <h2 className="text-2xl font-bold mb-4">System #{active.id}</h2>
+    {active && (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
+      <div className="bg-white p-6 w-full max-w-3xl rounded-3xl fade">
+        <h3 className="font-bold mb-2">System #{active.id}</h3>
 
-        <textarea
-          className="w-full h-32 p-4 border rounded-xl mb-4"
+        <textarea className="w-full border p-4 rounded-xl h-32"
           value={notes}
-          onChange={e=>{
-            setNotes(e.target.value);
-            localStorage.setItem("draft-"+active.id,e.target.value);
-          }}
-        />
+          onChange={e=>saveDraft(e.target.value)} />
 
-        <input
-          id="file-upload"
-          type="file"
-          multiple
+        <input type="file"
           accept="image/*"
-          capture={/Mobi/.test(navigator.userAgent)?"environment":undefined}
-        />
+          capture={/Mobi/.test(navigator.userAgent)}
+          onChange={upload}
+          className="my-4" />
 
-        <div className="flex justify-end gap-3 mt-6">
-          <button onClick={()=>setActive(null)}>Close</button>
-          <button onClick={saveSystem}
+        <div className="grid grid-cols-3 gap-3">
+          {photos.map((p,i)=>(
+            <a key={i} href={p} target="_blank">
+              <img src={p} className="rounded-xl"/>
+            </a>
+          ))}
+        </div>
+
+        <div className="flex justify-end gap-3 mt-4">
+          <button onClick={()=>setActive(null)}
+            className="border px-4 py-2 rounded-xl">Close</button>
+          <button onClick={save}
             className="bg-blue-600 text-white px-6 py-2 rounded-xl">
-            {saving?"Saving...":"Save"}
+            Save
           </button>
         </div>
       </div>
     </div>
     )}
 
-    {showAdd&&(
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center fade">
-      <div className="bg-white p-6 rounded-2xl">
-        <input
-          className="border p-3 rounded-xl mb-4"
+    {showAdd && (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
+      <div className="bg-white p-6 rounded-3xl fade">
+        <input className="border p-3 rounded-xl"
           placeholder="System ID"
-          value={newId}
-          onChange={e=>setNewId(e.target.value)}
-        />
-        <button onClick={createSystem}
-          className="bg-blue-600 text-white px-6 py-2 rounded-xl">
+          onChange={e=>setNewId(e.target.value)} />
+        <button onClick={addSystem}
+          className="mt-3 w-full bg-blue-600 text-white p-2 rounded-xl">
           Add
         </button>
       </div>
@@ -215,34 +226,17 @@ function App(){
   );
 }
 
-function Auth({setUser}){
-  const [email,setEmail]=useState("");
-  const [pass,setPass]=useState("");
-  return(
-    <div className="h-screen flex items-center justify-center">
-      <div className="bg-white p-8 rounded-2xl shadow w-80">
-        <input className="border p-3 w-full mb-3" placeholder="Email"
-          onChange={e=>setEmail(e.target.value)}/>
-        <input type="password" className="border p-3 w-full mb-3" placeholder="Password"
-          onChange={e=>setPass(e.target.value)}/>
-        <button className="bg-blue-600 text-white w-full p-3 rounded"
-          onClick={async()=>{
-            const {data}=await supabase.auth.signInWithPassword({email,password:pass});
-            if(data.user) setUser(data.user);
-          }}>Login</button>
-      </div>
-    </div>
-  );
+/* ================= ROOT ================= */
+function Root(){
+  const [user,setUser]=useState(null);
+  useEffect(()=>{
+    supabase.auth.getUser().then(r=>setUser(r.data.user));
+    supabase.auth.onAuthStateChange((_,s)=>setUser(s?.user||null));
+  },[]);
+  return user ? <App user={user}/> : <Auth onAuth={setUser}/>;
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+ReactDOM.createRoot(root).render(<Root/>);
 </script>
-
-<script>
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js");
-}
-</script>
-
 </body>
 </html>
