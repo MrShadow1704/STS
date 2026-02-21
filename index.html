@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>STS QAQC - Pro</title>
+<title>STS QAQC</title>
 
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -18,12 +18,8 @@ body { font-family: Inter, sans-serif; background:#f8fafc; overflow-x: hidden; }
   from { opacity:0; transform:scale(.95); }
   to { opacity:1; transform:scale(1); }
 }
-.sidebarBtn { width: 100%; text-align: left; padding: 0.75rem 1rem; border-radius: 0.75rem; transition: all 0.2s; font-weight: 500; }
+.sidebarBtn { width: 100%; text-align: left; padding: 0.75rem 1rem; border-radius: 0.75rem; transition: all 0.2s; }
 .sidebarBtn:hover { background: #eff6ff; color: #2563eb; }
-.sidebarActive { background: #2563eb; color: white; }
-/* Custom Scrollbar */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 </style>
 </head>
 
@@ -37,7 +33,7 @@ const SB_URL = "https://bbgcsddwzcrxwzczrojf.supabase.co";
 const SB_KEY = "sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f";
 const supabase = window.supabase.createClient(SB_URL, SB_KEY);
 
-/* ============= AUTH ============= */
+/* ============= AUTH COMPONENT ============= */
 function Auth({ onAuth }) {
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
@@ -48,11 +44,12 @@ function Auth({ onAuth }) {
 
   async function submit() {
     setMsg(""); setLoading(true);
+    if (!email || !pass) { setMsg("❌ Enter email and password"); setLoading(false); return; }
     try {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password: pass });
         if (error) throw error;
-        setMsg("✅ Success! Check email or login.");
+        setMsg("✅ Account created. Check email or login.");
         setMode("login");
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
@@ -65,19 +62,21 @@ function Auth({ onAuth }) {
 
   return (
     <div className="h-screen flex items-center justify-center bg-slate-100 p-4">
-      <div className="bg-white w-full max-w-md p-8 rounded-[32px] shadow-2xl fade-in space-y-4">
-        <h1 className="text-3xl font-black text-center text-blue-600 mb-2">STS QAQC</h1>
-        <input className="w-full border p-4 rounded-2xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+      <div className="bg-white w-full max-w-md p-8 rounded-3xl shadow-xl fade-in space-y-4">
+        <h1 className="text-2xl font-bold text-center text-blue-600">STS QAQC</h1>
+        <input className="w-full border p-3 rounded-xl" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <div className="relative">
-          <input type={show ? "text" : "password"} className="w-full border p-4 rounded-2xl bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Password" value={pass} onChange={(e) => setPass(e.target.value)} />
-          <button onClick={() => setShow(!show)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">{show ? "🙈" : "👁️"}</button>
+          <input type={show ? "text" : "password"} className="w-full border p-3 rounded-xl pr-12" placeholder="Password" value={pass} onChange={(e) => setPass(e.target.value)} />
+          <button type="button" onClick={() => setShow(!show)} className="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-500">
+            {show ? "🙈" : "👁️"}
+          </button>
         </div>
-        {msg && <div className="p-3 bg-blue-50 text-blue-700 text-sm rounded-xl text-center font-medium">{msg}</div>}
-        <button disabled={loading} onClick={submit} className="w-full bg-blue-600 text-white p-4 rounded-2xl font-bold shadow-lg shadow-blue-200">
-          {loading ? "Processing..." : mode === "login" ? "Login" : "Join Team"}
+        {msg && <div className="text-sm text-center text-gray-700">{msg}</div>}
+        <button disabled={loading} onClick={submit} className="w-full bg-blue-600 text-white p-3 rounded-xl disabled:opacity-60 font-bold">
+          {loading ? "Please wait..." : mode === "login" ? "Login" : "Create Account"}
         </button>
-        <button onClick={() => setMode(mode === "login" ? "signup" : "login")} className="w-full text-sm text-blue-600 font-medium pt-2">
-          {mode === "login" ? "New here? Create account" : "Have an account? Login"}
+        <button type="button" onClick={() => setMode(mode === "login" ? "signup" : "login")} className="w-full text-sm text-blue-600">
+          {mode === "login" ? "New user? Create account" : "Already have an account? Login"}
         </button>
       </div>
     </div>
@@ -96,9 +95,31 @@ function Dashboard({ user }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newId, setNewId] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [previewImg, setPreviewImg] = useState(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  useEffect(() => { loadSystems(); }, []);
+  // Sync state management
+  useEffect(() => {
+    loadSystems();
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', () => setIsOnline(false));
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
+
+  async function handleOnline() {
+    setIsOnline(true);
+    // Auto-sync offline notes
+    const offlineData = JSON.parse(localStorage.getItem("offline_notes") || "{}");
+    const entries = Object.entries(offlineData);
+    if (entries.length > 0) {
+      for (const [id, noteContent] of entries) {
+        await supabase.from("systems").update({ notes: noteContent }).eq("id", id);
+      }
+      localStorage.removeItem("offline_notes");
+      loadSystems();
+    }
+  }
 
   async function loadSystems() {
     const { data } = await supabase.from("systems").select("*").order("id");
@@ -107,6 +128,7 @@ function Dashboard({ user }) {
 
   useEffect(() => {
     if (!active) return;
+    // Check local storage first for offline draft
     const offlineNotes = JSON.parse(localStorage.getItem("offline_notes") || "{}");
     setNotes(offlineNotes[active.id] || active.notes || "");
     loadPhotos(active.id);
@@ -117,12 +139,13 @@ function Dashboard({ user }) {
     if (!data) { setPhotos([]); return; }
     setPhotos(data.map(f => {
       const { data: { publicUrl } } = supabase.storage.from("photos").getPublicUrl(`${id}/${f.name}`);
-      return { url: publicUrl, name: f.name };
+      return publicUrl;
     }));
   }
 
   const handleNoteChange = (val) => {
     setNotes(val);
+    // Save to localStorage for offline resilience
     if (active) {
       const offlineNotes = JSON.parse(localStorage.getItem("offline_notes") || "{}");
       offlineNotes[active.id] = val;
@@ -133,38 +156,30 @@ function Dashboard({ user }) {
   async function handleSave() {
     setLoading(true);
     const input = document.getElementById("file-upload");
-    
-    // Detailed Audit Timestamp
-    const now = new Date();
-    const timestampLabel = `\n\n[Modified by: ${user.email} on ${now.toLocaleDateString()} at ${now.toLocaleTimeString()}]`;
-    const finalNotes = notes + timestampLabel;
+    const timestamp = new Array(1).fill(new Date().toLocaleString());
+    const finalNotes = notes + `\n\n(Saved: ${timestamp})`;
 
-    try {
-      if (input.files.length) {
-        for (const f of input.files) {
-          const path = `${active.id}/${Date.now()}_${f.name}`;
-          await supabase.storage.from("photos").upload(path, f, { upsert: true });
-        }
+    if (input.files.length) {
+      for (const f of input.files) {
+        const path = `${active.id}/${Date.now()}_${f.name}`;
+        await supabase.storage.from("photos").upload(path, f, { upsert: true });
       }
+    }
 
-      await supabase.from("systems").update({ notes: finalNotes, status: "completed" }).eq("id", active.id);
-      
+    const { error } = await supabase.from("systems")
+      .update({ notes: finalNotes, status: "completed" })
+      .eq("id", active.id);
+
+    if (!error) {
       const offlineNotes = JSON.parse(localStorage.getItem("offline_notes") || "{}");
       delete offlineNotes[active.id];
       localStorage.setItem("offline_notes", JSON.stringify(offlineNotes));
+    }
 
-      input.value = "";
-      setActive(null);
-      loadSystems();
-    } catch(e) { alert("Save error: " + e.message); }
+    input.value = "";
+    setActive(null);
+    loadSystems();
     setLoading(false);
-  }
-
-  async function deletePhoto(photoPath) {
-    if(!confirm("Delete this photo?")) return;
-    const path = photoPath.split("/photos/")[1];
-    await supabase.storage.from("photos").remove([path]);
-    loadPhotos(active.id);
   }
 
   async function createSystem() {
@@ -179,153 +194,119 @@ function Dashboard({ user }) {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden relative">
       
-      {/* MOBILE TRIGGER */}
-      <div className="lg:hidden fixed top-4 right-4 z-50">
-        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="bg-blue-600 text-white p-3 rounded-full shadow-lg">
-          {sidebarOpen ? "✕" : "☰"}
-        </button>
+      {/* MOBILE HEADER */}
+      <div className="lg:hidden absolute top-0 left-0 right-0 bg-white border-b p-4 flex justify-between items-center z-20">
+        <h1 className="font-bold text-blue-600">STS QAQC</h1>
+        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-2xl">☰</button>
       </div>
 
       {/* SIDEBAR */}
-      <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform fixed lg:relative z-40 w-72 h-full bg-white border-r p-6 flex flex-col shadow-xl lg:shadow-none`}>
-        <div className="mb-8">
-          <h1 className="text-2xl font-black text-blue-600 tracking-tight">STS QAQC</h1>
-          <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
-             <p className="text-[10px] uppercase font-bold text-slate-400">Operator</p>
-             <p className="text-xs font-semibold text-slate-700 truncate">{user?.email}</p>
-          </div>
+      <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 fixed lg:relative z-30 w-72 h-full bg-white border-r p-6 flex flex-col`}>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-blue-600">STS QAQC</h1>
+          <p className="text-xs text-gray-500 break-all">{user?.email}</p>
+          {!isOnline && <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-bold">OFFLINE MODE</span>}
         </div>
 
-        <button onClick={() => {setShowAdd(true); setSidebarOpen(false);}} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold mb-6 hover:bg-blue-700 transition shadow-lg shadow-blue-100">
-          + New System
+        <button onClick={() => {setShowAdd(true); setSidebarOpen(false);}} className="bg-blue-600 text-white py-3 rounded-2xl font-semibold mb-6 shadow-lg shadow-blue-200 hover:bg-blue-700 transition">
+          + Add System
         </button>
 
-        <nav className="flex-1 space-y-1">
-          <button onClick={() => setFilter("all")} className={`sidebarBtn ${filter === 'all' ? 'sidebarActive' : 'text-slate-600'}`}>📁 All Assets</button>
-          <button onClick={() => setFilter("completed")} className={`sidebarBtn ${filter === 'completed' ? 'sidebarActive' : 'text-slate-600'}`}>✅ Completed</button>
-          <button onClick={() => setFilter("not_completed")} className={`sidebarBtn ${filter === 'not_completed' ? 'sidebarActive' : 'text-slate-600'}`}>❌ Pending</button>
-        </nav>
-
-        <div className="mt-auto pt-6 border-t">
-          <button onClick={() => supabase.auth.signOut()} className="w-full py-4 text-red-500 font-bold hover:bg-red-50 rounded-2xl transition flex items-center justify-center gap-2">
-            <span>Logout</span>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-          </button>
+        <div className="flex flex-col gap-2 flex-1">
+          <button onClick={() => {setFilter("all"); setSidebarOpen(false);}} className="sidebarBtn">📁 All Systems</button>
+          <button onClick={() => {setFilter("completed"); setSidebarOpen(false);}} className="sidebarBtn">✅ Completed</button>
+          <button onClick={() => {setFilter("not_completed"); setSidebarOpen(false);}} className="sidebarBtn">❌ Not Completed</button>
         </div>
+
+        <div className="mt-4 p-4 rounded-2xl bg-slate-50 border text-xs text-gray-500 mb-4">
+          <p className="font-bold text-blue-800 mb-1">Status</p>
+          <p>• Offline drafts enabled</p>
+          <p>• Auto-sync on connection</p>
+        </div>
+
+        <button onClick={() => supabase.auth.signOut()} className="w-full py-3 border border-red-200 text-red-600 rounded-xl font-bold hover:bg-red-50 transition">
+          Logout
+        </button>
       </div>
 
-      {/* MAIN */}
-      <div className="flex-1 p-6 lg:p-12 overflow-y-auto bg-slate-50">
-        <div className="max-w-6xl mx-auto">
-          <div className="relative mb-10 group">
-            <input className="w-full border-0 p-5 rounded-[24px] shadow-sm group-hover:shadow-md transition bg-white text-lg pl-14 outline-none focus:ring-2 focus:ring-blue-500" 
-              placeholder="Search by System ID..." value={search} onChange={e => setSearch(e.target.value)} />
-            <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300">🔍</span>
+      {/* MAIN CONTENT */}
+      <div className="flex-1 p-6 lg:p-10 overflow-y-auto mt-14 lg:mt-0">
+        <div className="flex flex-wrap gap-4 mb-8">
+          <div className="relative flex-1 min-w-[280px]">
+            <input className="w-full border p-4 rounded-2xl pr-12" placeholder="Search system ID..." value={search} onChange={e => setSearch(e.target.value)} />
             {search && (
-              <button onClick={() => setSearch("")} className="absolute right-6 top-1/2 -translate-y-1/2 bg-slate-100 text-slate-500 w-8 h-8 rounded-full flex items-center justify-center hover:bg-slate-200">✕</button>
+              <button onClick={() => setSearch("")} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">✕</button>
             )}
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filtered.map(s => (
-              <div key={s.id} onClick={() => setActive(s)}
-                className={`group cursor-pointer p-8 rounded-[32px] border-2 transition-all hover:-translate-y-1 active:scale-95
-                ${s.status === "completed" ? "bg-white border-green-100 hover:border-green-300" : "bg-white border-slate-100 hover:border-blue-200"}`}>
-                <div className="flex justify-between items-start mb-4">
-                   <div className={`p-2 rounded-xl ${s.status === "completed" ? "bg-green-100 text-green-600" : "bg-slate-100 text-slate-500"}`}>
-                      {s.status === "completed" ? "✓" : "•"}
-                   </div>
-                   <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Asset</span>
-                </div>
-                <h3 className="font-black text-2xl text-slate-800 mb-1">#{s.id}</h3>
-                <p className="text-sm font-semibold text-slate-400">
-                  {s.status === "completed" ? "Quality Passed" : "Awaiting Inspection"}
-                </p>
-              </div>
-            ))}
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filtered.map(s => (
+            <div key={s.id} onClick={() => setActive(s)}
+              className={`cursor-pointer p-6 rounded-3xl border shadow-sm hover:shadow-md transition-all active:scale-95
+              ${s.status === "completed" ? "bg-green-50 border-green-200" : "bg-white border-slate-200"}`}>
+              <h3 className="font-bold text-lg">System #{s.id}</h3>
+              <p className="mt-2 text-sm font-medium">
+                {s.status === "completed" ? "🟢 Completed" : "⚪ Pending"}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
 
       {/* SYSTEM MODAL */}
       {active && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-[60] p-4">
-          <div className="bg-white w-full max-w-4xl rounded-[40px] overflow-hidden shadow-2xl fade-in flex flex-col max-h-[90vh]">
-            <div className="bg-blue-600 p-8 text-white flex justify-between items-center">
-              <div>
-                <h2 className="text-3xl font-black">System #{active.id}</h2>
-                <p className="text-blue-100 text-sm font-medium">Capture Evidence & Log Inspection</p>
-              </div>
-              <button onClick={() => setActive(null)} className="bg-white/10 hover:bg-white/20 p-3 rounded-full transition">✕</button>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-40 p-4">
+          <div className="bg-white w-full max-w-2xl rounded-[32px] overflow-hidden shadow-2xl fade-in flex flex-col max-h-[90vh]">
+            <div className="bg-blue-600 text-white p-6">
+              <h2 className="text-xl font-bold">System #{active.id}</h2>
+              <p className="text-sm opacity-80">Documentation & Camera Upload</p>
             </div>
             
-            <div className="p-8 overflow-y-auto flex-1 space-y-6">
-              <div>
-                <label className="block text-sm font-black text-slate-700 uppercase mb-2 tracking-wide">Inspection Log</label>
-                <textarea value={notes} onChange={e => handleNoteChange(e.target.value)}
-                  className="w-full border-2 border-slate-100 p-5 rounded-3xl h-40 focus:border-blue-500 outline-none transition bg-slate-50"
-                  placeholder="Enter detailed observations..."/>
+            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+              <label className="block text-sm font-bold text-gray-700">Inspection Notes</label>
+              <textarea value={notes} onChange={e => handleNoteChange(e.target.value)}
+                className="w-full border p-4 rounded-2xl h-32 focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="Type notes here... (Saved locally automatically)"/>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-gray-700">Photos</label>
+                <input id="file-upload" type="file" accept="image/*" capture="camera" multiple 
+                  className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
               </div>
 
-              <div>
-                <label className="block text-sm font-black text-slate-700 uppercase mb-3 tracking-wide">Photo Evidence</label>
-                <div className="flex items-center justify-center w-full">
-                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-200 border-dashed rounded-3xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition">
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <p className="text-sm text-slate-500 font-bold">📸 Upload or Take Photo</p>
-                      <p className="text-xs text-slate-400 mt-1">Multi-selection supported</p>
-                    </div>
-                    <input id="file-upload" type="file" accept="image/*" capture="camera" multiple className="hidden" />
-                  </label>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {photos.map((p, i) => (
-                  <div key={i} className="group relative rounded-[20px] overflow-hidden bg-slate-100 aspect-square border-2 border-white shadow-sm hover:shadow-md transition">
-                    <img src={p.url} className="h-full w-full object-cover cursor-zoom-in" onClick={() => setPreviewImg(p.url)} />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center gap-2">
-                       <a href={p.url} download={`STS_${active.id}_${i}.jpg`} className="bg-white text-slate-800 p-2 rounded-lg text-[10px] font-bold">Download</a>
-                       <button onClick={() => deletePhoto(p.url)} className="bg-red-500 text-white p-2 rounded-lg text-[10px] font-bold">Delete</button>
-                    </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {photos.map((url, i) => (
+                  <div key={i} className="relative group rounded-xl overflow-hidden border aspect-square">
+                    <img src={url} className="h-full w-full object-cover"/>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="p-8 border-t bg-slate-50 flex gap-4">
-              <button onClick={() => setActive(null)} className="flex-1 py-4 font-bold text-slate-500 hover:bg-slate-200 rounded-2xl transition">Discard</button>
-              <button onClick={handleSave} disabled={loading} className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black shadow-lg shadow-blue-200 hover:bg-blue-700 transition">
-                {loading ? "Saving Progress..." : "Commit Save"}
+            <div className="p-6 border-t flex gap-3">
+              <button onClick={() => setActive(null)} className="flex-1 py-3 font-bold text-gray-500 bg-gray-100 rounded-2xl">Close</button>
+              <button onClick={handleSave} disabled={loading} className="flex-[2] py-3 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-100">
+                {loading ? "Syncing..." : "Save & Complete"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* FULL PHOTO PREVIEW OVERLAY */}
-      {previewImg && (
-        <div className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-4 lg:p-10" onClick={() => setPreviewImg(null)}>
-          <button className="absolute top-10 right-10 text-white text-4xl">✕</button>
-          <img src={previewImg} className="max-h-full max-w-full rounded-lg shadow-2xl animate-in fade-in duration-300" onClick={e => e.stopPropagation()} />
-          <a href={previewImg} download className="absolute bottom-10 bg-white px-8 py-3 rounded-full font-bold shadow-xl">Download High-Res Image</a>
-        </div>
-      )}
-
       {/* ADD SYSTEM MODAL */}
       {showAdd && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
-          <div className="bg-white w-full max-w-sm rounded-[40px] p-10 shadow-2xl fade-in text-center">
-            <h2 className="text-2xl font-black mb-2">New Inspection</h2>
-            <p className="text-slate-400 text-sm mb-6 font-medium">Enter the asset identification number</p>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl fade-in">
+            <h2 className="text-xl font-bold mb-4 text-center">New Inspection</h2>
             <input value={newId} onChange={e => setNewId(e.target.value)}
-              className="w-full border-2 border-slate-100 p-5 rounded-[24px] mb-8 text-center text-2xl font-black focus:border-blue-500 outline-none"
-              placeholder="000000"/>
-            <div className="flex gap-4">
-              <button onClick={() => setShowAdd(false)} className="flex-1 py-4 font-bold text-slate-400">Cancel</button>
-              <button onClick={createSystem} className="flex-2 py-4 px-10 bg-blue-600 text-white rounded-2xl font-black shadow-lg shadow-blue-100">Add Asset</button>
+              className="w-full border p-4 rounded-2xl mb-6 text-center text-lg font-bold"
+              placeholder="System ID #"/>
+            <div className="flex gap-3">
+              <button onClick={() => setShowAdd(false)} className="flex-1 py-3 border rounded-2xl">Cancel</button>
+              <button onClick={createSystem} className="flex-1 py-3 bg-blue-600 text-white rounded-2xl font-bold">Add</button>
             </div>
           </div>
         </div>
@@ -335,7 +316,7 @@ function Dashboard({ user }) {
   );
 }
 
-/* ============= ROOT ============= */
+/* ============= ROOT WRAPPER ============= */
 function Root() {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
