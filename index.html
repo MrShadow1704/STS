@@ -1,214 +1,171 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>STS QAQC</title>
-
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-
-<style>
-body { font-family: Inter, sans-serif; background:#f8fafc; }
-.fade { animation: fadeIn .3s ease; }
-@keyframes fadeIn { from{opacity:0; transform:scale(.95)} to{opacity:1} }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QA Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
+<body class="bg-gray-50 text-gray-900 min-h-screen font-sans">
 
-<body>
-<div id="root"></div>
+    <nav class="bg-white border-b sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                <h1 class="text-xl font-bold tracking-tight">QA Dashboard</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <input type="text" id="search" placeholder="Search ID..." class="px-4 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                <button onclick="addSystem()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition">+ Add System</button>
+            </div>
+        </div>
+    </nav>
 
-<script type="text/babel">
-const { useState, useEffect } = React;
+    <main class="max-w-7xl mx-auto p-8">
+        <div id="system-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            </div>
 
-const supabase = supabaseJs.createClient(
-  "https://bbgcsddwzcrxwzczrojf.supabase.co",
-  "sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f"
-);
-
-function App(){
-  const [user,setUser]=useState(null);
-  const [systems,setSystems]=useState([]);
-  const [search,setSearch]=useState("");
-  const [active,setActive]=useState(null);
-  const [notes,setNotes]=useState("");
-  const [photos,setPhotos]=useState([]);
-
-  useEffect(()=>{
-    supabase.auth.getUser().then(({data})=>{
-      if(data.user) setUser(data.user);
-    });
-  },[]);
-
-  useEffect(()=>{
-    if(user) loadSystems();
-  },[user]);
-
-  async function loadSystems(){
-    const {data}=await supabase.from("systems").select("*").order("id");
-    setSystems(data||[]);
-  }
-
-  async function saveSystem(){
-    const payload={
-      notes,
-      status: notes || photos.length ? "completed":"not_completed",
-      updated_at:new Date(),
-      updated_by:user.email
-    };
-    await supabase.from("systems").update(payload).eq("id",active.id);
-    localStorage.removeItem("draft-"+active.id);
-    loadSystems();
-    setActive(null);
-  }
-
-  useEffect(()=>{
-    if(active){
-      setNotes(
-        localStorage.getItem("draft-"+active.id) || active.notes || ""
-      );
-    }
-  },[active]);
-
-  function handleDraft(v){
-    setNotes(v);
-    localStorage.setItem("draft-"+active.id,v);
-  }
-
-  async function uploadPhoto(e){
-    const f=e.target.files[0];
-    if(!f) return;
-    const path=`${active.id}/${Date.now()}_${f.name}`;
-    await supabase.storage.from("photos").upload(path,f);
-    loadPhotos();
-  }
-
-  async function loadPhotos(){
-    const {data}=await supabase.storage.from("photos").list(active.id);
-    setPhotos(data||[]);
-  }
-
-  if(!user){
-    return <Auth setUser={setUser}/>
-  }
-
-  const filtered=systems.filter(s=>s.id.includes(search));
-
-  return (
-  <div className="flex h-screen">
-    <aside className="w-72 bg-white shadow-lg p-6 space-y-6 hidden md:block">
-      <h1 className="text-2xl font-bold text-indigo-600">STS QAQC</h1>
-      <p className="text-sm text-gray-500">Logged in as<br/>{user.email}</p>
-      <img src="https://illustrations.popsy.co/gray/work-from-home.svg"/>
-    </aside>
-
-    <main className="flex-1 p-6 overflow-y-auto">
-      <div className="flex gap-3 mb-6">
-        <input
-          className="flex-1 p-4 rounded-xl border"
-          placeholder="Search system"
-          value={search}
-          onChange={e=>setSearch(e.target.value)}
-        />
-        <button
-          onClick={()=>setSearch("")}
-          className="px-6 rounded-xl bg-red-500 text-white"
-        >Clear</button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {filtered.map(s=>(
-          <div
-            key={s.id}
-            onClick={()=>{setActive(s);loadPhotos()}}
-            className={`p-5 rounded-2xl shadow cursor-pointer transition
-            ${s.status==="completed"?"bg-green-100":"bg-red-100"}`}
-          >
-            <h3 className="font-bold">System #{s.id}</h3>
-            <p className="text-xs mt-2">
-              {s.updated_by}<br/>
-              {s.updated_at && new Date(s.updated_at).toLocaleString()}
-            </p>
-          </div>
-        ))}
-      </div>
+        <div class="mt-12 bg-gray-900 rounded-xl p-6 text-xs font-mono text-gray-400 shadow-inner">
+            <p class="text-gray-500 font-bold mb-2 uppercase border-b border-gray-800 pb-2">Console Diagnostics</p>
+            <div id="debug-log" class="h-32 overflow-y-auto space-y-1">
+                <p>> Dashboard Initialized. Awaiting Data...</p>
+            </div>
+        </div>
     </main>
 
-    {active && (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center fade">
-      <div className="bg-white w-full max-w-3xl rounded-3xl p-8 space-y-4">
-        <h2 className="text-2xl font-bold">System #{active.id}</h2>
+    <div id="modal" class="fixed inset-0 bg-black/50 hidden backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden">
+            <div class="px-8 py-6 border-b flex justify-between items-center bg-gray-50">
+                <h2 class="text-2xl font-bold">System #<span id="display-id">--</span></h2>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            
+            <div class="p-8 space-y-6">
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Test Results</label>
+                    <textarea id="note-input" rows="5" class="w-full border border-gray-200 rounded-xl p-4 text-gray-700 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Enter findings..."></textarea>
+                </div>
 
-        <textarea
-          className="w-full h-40 p-4 border rounded-xl"
-          value={notes}
-          onChange={e=>handleDraft(e.target.value)}
-        />
+                <div id="file-box" class="hidden p-4 bg-blue-50 rounded-xl border border-blue-100 flex justify-between items-center">
+                    <span class="text-blue-700 font-bold text-sm underline">Photo Attached</span>
+                    <a id="file-download" href="#" target="_blank" class="bg-blue-600 text-white px-4 py-1 rounded text-xs font-bold">View</a>
+                </div>
 
-        <input
-          type="file"
-          accept="image/*"
-          capture={/Mobi/.test(navigator.userAgent) ? "environment":undefined}
-          onChange={uploadPhoto}
-        />
+                <div class="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
+                    <p class="text-gray-400 text-sm mb-2">Upload New Attachment</p>
+                    <input type="file" id="upload-field" class="text-xs">
+                </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          {photos.map(p=>{
-            const url=supabase.storage.from("photos")
-              .getPublicUrl(`${active.id}/${p.name}`).data.publicUrl;
-            return(
-              <div key={p.name}>
-                <img src={url} className="rounded-xl h-28 w-full object-cover"/>
-                <a href={url} target="_blank"
-                   className="block text-center mt-1 text-blue-600">Download</a>
-              </div>
-            );
-          })}
+                <div class="flex gap-3">
+                    <button id="sync-btn" class="flex-1 bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 transition">Save & Update</button>
+                    <button onclick="deleteSystem()" class="bg-red-50 text-red-600 px-6 rounded-xl font-bold hover:bg-red-100 transition">Delete</button>
+                </div>
+            </div>
         </div>
-
-        <div className="flex justify-end gap-3">
-          <button onClick={()=>setActive(null)}>Cancel</button>
-          <button onClick={saveSystem}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-xl">
-            Save
-          </button>
-        </div>
-      </div>
     </div>
-    )}
-  </div>
-  );
-}
 
-function Auth({setUser}){
-  const [email,setEmail]=useState("");
-  const [pass,setPass]=useState("");
-  return(
-    <div className="h-screen flex items-center justify-center">
-      <div className="bg-white p-10 rounded-3xl shadow-xl w-96 space-y-4">
-        <h2 className="text-2xl font-bold text-center">STS Login</h2>
-        <input className="w-full p-3 border rounded"
-          placeholder="Email" onChange={e=>setEmail(e.target.value)}/>
-        <input type="password" className="w-full p-3 border rounded"
-          placeholder="Password" onChange={e=>setPass(e.target.value)}/>
-        <button className="w-full bg-indigo-600 text-white p-3 rounded"
-          onClick={async()=>{
-            const {data}=await supabase.auth.signInWithPassword({email, password:pass});
-            if(data.user) setUser(data.user);
-          }}>Login</button>
-        <button className="w-full border p-3 rounded"
-          onClick={()=>supabase.auth.signUp({email,password:pass})}>
-          Sign Up
-        </button>
-      </div>
-    </div>
-  );
-}
+    <script>
+        // 1. YOUR CONFIG
+        const DB_URL = 'https://bbgcsddwzcrxwzczrojf.supabase.co'; 
+        const DB_KEY = 'sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f';
+        const client = window.supabase.createClient(DB_URL, DB_KEY);
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
-</script>
+        let activeId = null;
+
+        function log(msg, isErr = false) {
+            const div = document.getElementById('debug-log');
+            const p = document.createElement('p');
+            p.className = isErr ? 'text-red-400' : 'text-green-400';
+            p.innerText = `> [${new Date().toLocaleTimeString()}] ${msg}`;
+            div.prepend(p);
+        }
+
+        async function loadData() {
+            try {
+                const { data, error } = await client.from('systems').select('*').order('id');
+                if (error) throw error;
+
+                const search = document.getElementById('search').value.toLowerCase();
+                const grid = document.getElementById('system-grid');
+                grid.innerHTML = '';
+
+                data.filter(s => s.id.includes(search)).forEach(s => {
+                    const isDone = s.notes || s.has_attachment;
+                    const card = document.createElement('div');
+                    card.className = "bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition cursor-pointer relative group";
+                    card.innerHTML = `
+                        <div class="flex justify-between items-start mb-4">
+                            <span class="text-3xl font-black text-gray-800">#${s.id}</span>
+                            <span class="px-2 py-1 rounded text-[10px] font-bold uppercase ${isDone ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}">${isDone ? 'Cleared' : 'Pending'}</span>
+                        </div>
+                        <p class="text-gray-500 text-sm line-clamp-2 mb-4">${s.notes || 'No results recorded yet...'}</p>
+                        ${s.has_attachment ? '<div class="text-blue-500 text-xs font-bold">📎 Photo Attached</div>' : ''}
+                    `;
+                    card.onclick = () => openModal(s);
+                    grid.appendChild(card);
+                });
+            } catch (err) {
+                log("DB Error: " + err.message, true);
+            }
+        }
+
+        function openModal(s) {
+            activeId = s.id;
+            document.getElementById('modal').classList.remove('hidden');
+            document.getElementById('display-id').innerText = s.id;
+            document.getElementById('note-input').value = s.notes || '';
+            
+            const box = document.getElementById('file-box');
+            if (s.has_attachment) {
+                box.classList.remove('hidden');
+                document.getElementById('file-download').href = `${DB_URL}/storage/v1/object/public/photos/${s.id}.jpg`;
+            } else { box.classList.add('hidden'); }
+        }
+
+        function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+
+        async function addSystem() {
+            const id = prompt("System ID:");
+            if (!id) return;
+            const { error } = await client.from('systems').insert([{ id: id }]);
+            if (error) log(error.message, true);
+            else { log(`System #${id} added.`); loadData(); }
+        }
+
+        async function deleteSystem() {
+            if (!confirm("Delete this system?")) return;
+            const { error } = await client.from('systems').delete().eq('id', activeId);
+            if (error) log(error.message, true);
+            else { log(`System #${activeId} removed.`); closeModal(); loadData(); }
+        }
+
+        document.getElementById('sync-btn').onclick = async () => {
+            const btn = document.getElementById('sync-btn');
+            btn.innerText = "Saving..."; btn.disabled = true;
+
+            const file = document.getElementById('upload-field').files[0];
+            let hasAttach = (await client.from('systems').select('has_attachment').eq('id', activeId).single()).data.has_attachment;
+
+            if (file) {
+                const { error } = await client.storage.from('photos').upload(`${activeId}.jpg`, file, { upsert: true });
+                if (error) log("Storage Error: " + error.message, true);
+                else hasAttach = true;
+            }
+
+            const { error } = await client.from('systems').update({ 
+                notes: document.getElementById('note-input').value, 
+                has_attachment: hasAttach 
+            }).eq('id', activeId);
+
+            if (error) log("Update Error: " + error.message, true);
+            else { log(`System #${activeId} updated.`); closeModal(); loadData(); }
+            
+            btn.innerText = "Save & Update"; btn.disabled = false;
+        };
+
+        document.getElementById('search').oninput = loadData;
+        loadData();
+    </script>
 </body>
 </html>
