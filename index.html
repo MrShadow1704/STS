@@ -33,7 +33,7 @@ const SB_URL = "https://bbgcsddwzcrxwzczrojf.supabase.co";
 const SB_KEY = "sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f";
 const supabase = window.supabase.createClient(SB_URL, SB_KEY);
 
-/* ================= AUTH ================= */
+/* AUTH */
 function Auth({ onAuth }) {
   const [email,setEmail]=useState("");
   const [pass,setPass]=useState("");
@@ -71,7 +71,7 @@ function Auth({ onAuth }) {
   );
 }
 
-/* ================= DASHBOARD ================= */
+/* DASHBOARD */
 function Dashboard({ user }) {
   const [systems,setSystems]=useState([]);
   const [active,setActive]=useState(null);
@@ -80,7 +80,6 @@ function Dashboard({ user }) {
   const [search,setSearch]=useState("");
   const [filter,setFilter]=useState("all");
   const [showAdd,setShowAdd]=useState(false);
-  const [showEdit,setShowEdit]=useState(null);
   const [newId,setNewId]=useState("");
   const [desc,setDesc]=useState("");
   const [sidebarOpen,setSidebarOpen]=useState(false);
@@ -150,22 +149,11 @@ function Dashboard({ user }) {
     if(!newId.trim()) return;
     await supabase.from("systems").insert([{
       id:newId.trim(),
-      description: desc || "Put your description here",
+      description:desc,
       notes:"",
       status:"not_completed"
     }]);
-    setShowAdd(false);
-    setNewId("");
-    setDesc("");
-    loadSystems();
-  }
-
-  async function updateSystem(){
-    await supabase.from("systems")
-      .update({ id:newId.trim(), description:desc || "Put your description here" })
-      .eq("id",showEdit.id);
-    setShowEdit(null);
-    loadSystems();
+    setShowAdd(false); setNewId(""); setDesc(""); loadSystems();
   }
 
   const filtered = systems.filter(s =>
@@ -211,38 +199,52 @@ function Dashboard({ user }) {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filtered.map(s=>(
-            <div key={s.id}
-              className={`p-8 rounded-3xl border shadow-sm
+            <div key={s.id} onClick={()=>setActive(s)}
+              className={`cursor-pointer p-8 rounded-3xl border shadow-sm
               ${s.status==="completed"?"bg-green-50 border-green-200":"bg-white border-slate-200"}`}>
-              <div onClick={()=>setActive(s)} className="cursor-pointer">
-                <h3 className="font-bold text-xl">{s.id}</h3>
-                <p className="text-sm text-gray-600 mt-2">{s.description || "Put your description here"}</p>
-              </div>
-              <button
-                onClick={()=>{ setShowEdit(s); setNewId(s.id); setDesc(s.description); }}
-                className="mt-4 text-xs text-red-600 font-bold"
-              >
-                ✏️ Edit
-              </button>
+              <h3 className="font-bold text-xl">{s.id}</h3>
+              <p className="text-sm text-gray-600 mt-2">{s.description}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* EDIT SYSTEM MODAL */}
-      {showEdit && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-3xl w-full max-w-sm">
-            <h2 className="font-bold text-lg mb-4 text-center">Edit System</h2>
-            <input className="w-full border p-4 rounded-2xl mb-3 text-center font-bold"
-              value={newId}
-              onChange={e=>setNewId(e.target.value)} />
-            <input className="w-full border p-4 rounded-2xl mb-6 text-center"
-              value={desc}
-              onChange={e=>setDesc(e.target.value)} />
-            <button onClick={updateSystem} className="w-full bg-red-600 text-white py-3 rounded-2xl font-bold">
-              Save Changes
-            </button>
+      {/* SYSTEM MODAL */}
+      {active && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-40">
+          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="bg-red-600 text-white p-6">
+              <h2 className="text-xl font-bold">{active.id}</h2>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              <textarea value={notes} onChange={e=>setNotes(e.target.value)}
+                className="w-full border p-4 rounded-2xl h-32"
+                placeholder="Inspection notes..." />
+
+              <input id="file-upload" type="file" multiple />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {photos.map(p=>(
+                  <div key={p.name} className="border rounded-2xl p-2">
+                    <img src={p.url} className="rounded mb-2"/>
+                    <p className="text-xs">{p.timestamp}</p>
+                    <p className="text-xs">{p.uploader}</p>
+                    <div className="flex gap-2 mt-2">
+                      <a href={p.url} download className="flex-1 bg-red-500 text-white text-xs py-2 rounded text-center">Download</a>
+                      <button onClick={()=>deletePhoto(p)} className="flex-1 bg-gray-200 text-xs py-2 rounded">Delete</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-6 border-t flex gap-3">
+              <button onClick={()=>setActive(null)} className="flex-1 py-3 bg-gray-100 rounded-2xl">Close</button>
+              <button onClick={save} className="flex-1 py-3 bg-red-600 text-white rounded-2xl font-bold">
+                Save & Complete
+              </button>
+            </div>
           </div>
         </div>
       )}
