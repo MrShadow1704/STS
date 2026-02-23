@@ -12,19 +12,22 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
 <style>
-body { font-family: Inter, sans-serif; background:#fff; overflow-x:hidden }
+body { font-family: Inter, sans-serif; background:#fff; }
 .fade-in { animation: fade .25s ease-out }
 @keyframes fade {
-  from {opacity:0; transform:scale(.95)}
-  to {opacity:1; transform:scale(1)}
+  from { opacity:0; transform:scale(.95) }
+  to { opacity:1; transform:scale(1) }
 }
-.sidebarBtn { width:100%; text-align:left; padding:.75rem 1rem; border-radius:.75rem }
-.sidebarBtn:hover { background:#fee2e2; color:#dc2626 }
 .toast {
-  position:fixed; top:20px; right:20px;
-  background:#16a34a; color:white;
-  padding:12px 18px; border-radius:12px;
-  font-weight:700; z-index:1000;
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #16a34a;
+  color: white;
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-weight: 700;
+  z-index: 9999;
 }
 </style>
 </head>
@@ -40,12 +43,13 @@ const supabase = window.supabase.createClient(
   "sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f"
 );
 
-function Toast({msg}) {
-  if(!msg) return null;
-  return <div className="toast fade-in">{msg}</div>;
+/* ---------- TOAST ---------- */
+function Toast({ message }) {
+  if (!message) return null;
+  return <div className="toast fade-in">{message}</div>;
 }
 
-/* ================= DASHBOARD ================= */
+/* ---------- DASHBOARD ---------- */
 function Dashboard({ user }) {
   const [systems, setSystems] = useState([]);
   const [active, setActive] = useState(null);
@@ -57,9 +61,9 @@ function Dashboard({ user }) {
   const [newId, setNewId] = useState("");
   const [toast, setToast] = useState("");
 
-  function notify(msg){
+  function notify(msg) {
     setToast(msg);
-    setTimeout(()=>setToast(""),2000);
+    setTimeout(() => setToast(""), 2000);
   }
 
   useEffect(() => { loadSystems(); }, []);
@@ -69,11 +73,12 @@ function Dashboard({ user }) {
     setSystems(data || []);
   }
 
-  useEffect(() => {
-    if (!active) return;
-    setNotes(active.notes || "");
-    loadPhotos(active.id);
-  }, [active]);
+  /* ---------- SYSTEM CLICK FIX ---------- */
+  function openSystem(system) {
+    setActive(system);
+    setNotes(system.notes || "");
+    loadPhotos(system.id);
+  }
 
   async function loadPhotos(id) {
     const { data } = await supabase.storage.from("photos").list(id);
@@ -95,7 +100,7 @@ function Dashboard({ user }) {
     setPhotos(mapped);
   }
 
-  async function handleSave() {
+  async function saveSystem() {
     let status = "completed";
     if (!notes.trim() && photos.length === 0) status = "not_completed";
 
@@ -105,16 +110,16 @@ function Dashboard({ user }) {
 
     setActive(null);
     loadSystems();
-    notify("System saved");
+    notify("System updated successfully");
   }
 
-  async function createSystem() {
+  async function addSystem() {
     if (!newId.trim()) return;
 
     const { data: exists } = await supabase
       .from("systems").select("id").eq("id", newId).single();
 
-    if (exists) return alert("Duplicate system number");
+    if (exists) return alert("System already exists");
 
     await supabase.from("systems").insert([{
       id: newId,
@@ -122,9 +127,10 @@ function Dashboard({ user }) {
       status: "not_completed"
     }]);
 
-    setNewId(""); setShowAdd(false);
+    setShowAdd(false);
+    setNewId("");
     loadSystems();
-    notify("System added");
+    notify("System added successfully");
   }
 
   async function deletePhoto(photo) {
@@ -132,7 +138,7 @@ function Dashboard({ user }) {
       .remove([`${active.id}/${photo.name}`]);
 
     loadPhotos(active.id);
-    notify("Photo deleted");
+    notify("Photo deleted successfully");
   }
 
   const filtered = systems.filter(s =>
@@ -142,40 +148,40 @@ function Dashboard({ user }) {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Toast msg={toast} />
+      <Toast message={toast} />
 
       {/* SIDEBAR */}
-      <div className="w-72 border-r p-6 bg-white">
+      <aside className="w-72 border-r p-6">
         <h1 className="text-2xl font-bold text-red-600 mb-6">STS QAQC</h1>
 
-        <button onClick={()=>setShowAdd(true)}
+        <button onClick={() => setShowAdd(true)}
           className="bg-red-600 text-white w-full py-3 rounded-2xl font-bold mb-6">
           + Add System
         </button>
 
-        <button onClick={()=>setFilter("all")} className="sidebarBtn">📁 All</button>
-        <button onClick={()=>setFilter("completed")} className="sidebarBtn">✅ Completed</button>
-        <button onClick={()=>setFilter("not_completed")} className="sidebarBtn">❌ Not Completed</button>
+        <button onClick={() => setFilter("all")} className="block w-full text-left py-2">📁 All</button>
+        <button onClick={() => setFilter("completed")} className="block w-full text-left py-2">✅ Completed</button>
+        <button onClick={() => setFilter("not_completed")} className="block w-full text-left py-2">❌ Not Completed</button>
 
-        <button onClick={()=>supabase.auth.signOut()}
+        <button onClick={() => supabase.auth.signOut()}
           className="mt-6 w-full py-3 border rounded-xl text-red-600 font-bold">
           Logout
         </button>
-      </div>
+      </aside>
 
       {/* MAIN */}
-      <div className="flex-1 p-8 overflow-y-auto">
+      <main className="flex-1 p-8 overflow-y-auto">
         <input
           className="w-full border p-4 rounded-2xl mb-6"
           placeholder="Search system ID..."
           value={search}
-          onChange={e=>setSearch(e.target.value)}
+          onChange={e => setSearch(e.target.value)}
         />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {filtered.map(s => (
             <div key={s.id}
-              onClick={()=>setActive(s)}
+              onClick={() => openSystem(s)}
               className={`cursor-pointer p-6 rounded-3xl border shadow-sm
               ${s.status === "completed"
                 ? "bg-green-50 border-green-300"
@@ -187,7 +193,7 @@ function Dashboard({ user }) {
             </div>
           ))}
         </div>
-      </div>
+      </main>
 
       {/* SYSTEM MODAL */}
       {active && (
@@ -201,20 +207,18 @@ function Dashboard({ user }) {
               <textarea
                 className="w-full border p-4 rounded-2xl h-32"
                 value={notes}
-                onChange={e=>setNotes(e.target.value)}
+                onChange={e => setNotes(e.target.value)}
                 placeholder="Inspection notes..."
               />
 
-              <input id="file-upload" type="file" multiple accept="image/*" />
-
               <div className="grid grid-cols-2 gap-4">
-                {photos.map((p,i)=>(
+                {photos.map((p,i) => (
                   <div key={i} className="border p-2 rounded-xl">
-                    <img src={p.url} className="w-full h-32 object-cover rounded"/>
-                    <p className="text-xs mt-1"><b>By:</b> {p.owner}</p>
+                    <img src={p.url} className="w-full h-32 object-cover rounded" />
+                    <p className="text-xs"><b>By:</b> {p.owner}</p>
                     <p className="text-xs"><b>At:</b> {p.timestamp}</p>
                     <button
-                      onClick={()=>deletePhoto(p)}
+                      onClick={() => deletePhoto(p)}
                       className="mt-2 w-full bg-red-500 text-white text-xs py-2 rounded">
                       Delete
                     </button>
@@ -224,11 +228,11 @@ function Dashboard({ user }) {
             </div>
 
             <div className="p-6 border-t flex gap-3">
-              <button onClick={()=>setActive(null)}
+              <button onClick={() => setActive(null)}
                 className="flex-1 bg-gray-100 py-3 rounded-xl font-bold">
                 Close
               </button>
-              <button onClick={handleSave}
+              <button onClick={saveSystem}
                 className="flex-[2] bg-red-600 text-white py-3 rounded-xl font-bold">
                 Save & Complete
               </button>
@@ -237,7 +241,7 @@ function Dashboard({ user }) {
         </div>
       )}
 
-      {/* ADD SYSTEM */}
+      {/* ADD SYSTEM MODAL */}
       {showAdd && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
           <div className="bg-white p-8 rounded-3xl fade-in">
@@ -246,13 +250,13 @@ function Dashboard({ user }) {
               className="border p-4 rounded-xl w-full mb-4 text-center font-bold"
               placeholder="System ID"
               value={newId}
-              onChange={e=>setNewId(e.target.value)}
+              onChange={e => setNewId(e.target.value)}
             />
-            <button onClick={createSystem}
+            <button onClick={addSystem}
               className="w-full bg-red-600 text-white py-3 rounded-xl font-bold">
               Add
             </button>
-            <button onClick={()=>setShowAdd(false)}
+            <button onClick={() => setShowAdd(false)}
               className="w-full mt-3 border py-2 rounded-xl">
               Cancel
             </button>
@@ -263,12 +267,12 @@ function Dashboard({ user }) {
   );
 }
 
-/* ================= ROOT ================= */
+/* ---------- ROOT ---------- */
 function Root() {
   const [user, setUser] = useState(null);
   useEffect(() => {
-    supabase.auth.getUser().then(r=>setUser(r.data.user));
-    supabase.auth.onAuthStateChange((_,s)=>setUser(s?.user||null));
+    supabase.auth.getUser().then(r => setUser(r.data.user));
+    supabase.auth.onAuthStateChange((_, s) => setUser(s?.user || null));
   }, []);
   return user ? <Dashboard user={user}/> : <div>Login unchanged</div>;
 }
