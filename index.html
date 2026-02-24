@@ -20,6 +20,13 @@ body { font-family: Inter, sans-serif; background:#fff; overflow-x:hidden; }
 }
 .sidebarBtn { width:100%; text-align:left; padding:.75rem 1rem; border-radius:.75rem; transition: all 0.2s; }
 .sidebarBtn:hover { background:#fee2e2; color:#b91c1c; }
+
+/* Creative Toast Animation */
+.toast-in { animation: slideIn 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); }
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
 </style>
 </head>
 
@@ -85,8 +92,15 @@ function Dashboard({ user }) {
   const [newId,setNewId]=useState("");
   const [desc,setDesc]=useState("");
   const [sidebarOpen,setSidebarOpen]=useState(false);
+  const [toast, setToast] = useState(null);
 
   useEffect(()=>{ loadSystems(); },[]);
+
+  // Creative Toast Helper
+  const notify = (msg, type = "success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   async function loadSystems(){
     const {data}=await supabase.from("systems").select("*").order("id");
@@ -130,6 +144,7 @@ function Dashboard({ user }) {
       .update({ notes, status: hasContent ? "completed" : "not_completed" })
       .eq("id",active.id);
 
+    notify("System saved successfully!");
     setActive(null);
     loadSystems();
   }
@@ -146,6 +161,7 @@ function Dashboard({ user }) {
         loadSystems();
       }
     }
+    notify("Photo deleted", "delete");
   }
 
   async function createSystem(){
@@ -157,6 +173,7 @@ function Dashboard({ user }) {
       status:"not_completed"
     }]);
     setShowAdd(false); setNewId(""); setDesc(""); loadSystems();
+    notify("New system added!");
   }
 
   async function updateSystem() {
@@ -166,6 +183,7 @@ function Dashboard({ user }) {
       .eq("id", editTarget.originalId);
     setEditTarget(null);
     loadSystems();
+    notify("System updated!");
   }
 
   async function deleteSystem() {
@@ -173,15 +191,39 @@ function Dashboard({ user }) {
     await supabase.from("systems").delete().eq("id", editTarget.originalId);
     setEditTarget(null);
     loadSystems();
+    notify("System deleted", "delete");
   }
 
+  // File Download Helper (Prevents opening in new tab)
+  const forceDownload = async (url, filename) => {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
   const filtered = systems.filter(s =>
-    s.id.toLowerCase().includes(search.toLowerCase()) &&
+    (s.id.toLowerCase().includes(search.toLowerCase()) || 
+     s.description.toLowerCase().includes(search.toLowerCase())) &&
     (filter==="all" || s.status===filter)
   );
 
   return (
     <div className="flex h-screen overflow-hidden bg-white">
+      
+      {/* CREATIVE TOAST */}
+      {toast && (
+        <div className={`fixed top-5 right-5 z-[100] p-4 rounded-2xl shadow-2xl flex items-center gap-3 toast-in text-white font-bold
+          ${toast.type === 'delete' ? 'bg-orange-500' : 'bg-green-600'}`}>
+          <span>{toast.type === 'delete' ? '🗑️' : '🚀'}</span>
+          {toast.msg}
+        </div>
+      )}
 
       {/* MOBILE HEADER */}
       <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b p-4 flex justify-between z-20">
@@ -211,10 +253,20 @@ function Dashboard({ user }) {
 
       {/* MAIN */}
       <div className="flex-1 p-6 lg:p-10 overflow-y-auto mt-14 lg:mt-0">
-        <input className="w-full border p-4 rounded-2xl mb-6 shadow-sm focus:ring-2 focus:ring-red-500 outline-none"
-          placeholder="Search system ID..."
-          value={search}
-          onChange={e=>setSearch(e.target.value)} />
+        <div className="relative mb-6">
+          <input className="w-full border p-4 pr-12 rounded-2xl shadow-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+            placeholder="Search system number or description..."
+            value={search}
+            onChange={e=>setSearch(e.target.value)} />
+          {search && (
+            <button 
+              onClick={() => setSearch("")}
+              className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-red-100 hover:text-red-600 transition-colors"
+            >
+              ✕
+            </button>
+          )}
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filtered.map(s=>(
@@ -262,7 +314,12 @@ function Dashboard({ user }) {
                     <p className="text-[10px] text-gray-400 font-mono">{p.timestamp}</p>
                     <p className="text-xs font-semibold truncate">{p.uploader}</p>
                     <div className="flex gap-2 mt-3">
-                      <a href={p.url} download={p.name} className="flex-1 bg-red-500 text-white text-xs py-2 rounded-lg text-center font-bold hover:bg-red-600 transition">Download</a>
+                      <button 
+                        onClick={() => forceDownload(p.url, p.name)} 
+                        className="flex-1 bg-red-500 text-white text-xs py-2 rounded-lg text-center font-bold hover:bg-red-600 transition"
+                      >
+                        Download
+                      </button>
                       <button onClick={()=>deletePhoto(p)} className="flex-1 bg-gray-200 text-gray-700 text-xs py-2 rounded-lg font-bold hover:bg-gray-300 transition">Delete</button>
                     </div>
                   </div>
