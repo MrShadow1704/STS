@@ -31,17 +31,6 @@ body { font-family: Inter, sans-serif; background:#fff; overflow-x:hidden; }
   }
 }
 
-/* Hands Covering Eyes Animation */
-.worker-wrapper { position: relative; width: 40px; height: 40px; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.worker-emoji { font-size: 24px; transition: all 0.3s; }
-.worker-hands { 
-    position: absolute; 
-    font-size: 20px; 
-    bottom: -20px; 
-    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
-}
-.worker-hands.covering { bottom: 6px; }
-
 .toast-in { animation: slideIn 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); }
 @keyframes slideIn {
   from { transform: translateX(100%); opacity: 0; }
@@ -89,9 +78,8 @@ function Auth({ onAuth }) {
         <input className="w-full border p-3 rounded-xl mt-4 focus:ring-2 focus:ring-red-500 outline-none" placeholder="Email" onChange={e=>setEmail(e.target.value)} />
         <div className="relative mt-2">
           <input type={showPass ? "text" : "password"} className="w-full border p-3 rounded-xl focus:ring-2 focus:ring-red-500 outline-none" placeholder="Password" onChange={e=>setPass(e.target.value)} />
-          <button type="button" onClick={()=>setShowPass(!showPass)} className="absolute right-2 top-1/2 -translate-y-1/2 worker-wrapper">
-             <span className="worker-emoji">👷</span>
-             <span className={`worker-hands ${!showPass ? 'covering' : ''}`}>👐</span>
+          <button type="button" onClick={()=>setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-xl opacity-50 hover:opacity-100 transition-opacity">
+              {showPass ? "👁️" : "👁️‍🗨️"}
           </button>
         </div>
         {msg && <p className="text-sm text-center mt-2 text-red-600 font-bold">{msg}</p>}
@@ -156,7 +144,6 @@ function Dashboard({ user }) {
     }
   },[active]);
 
-  /* VOICE TO TEXT LOGIC */
   const startListening = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -174,29 +161,86 @@ function Dashboard({ user }) {
     recognition.start();
   };
 
-  /* PDF GENERATOR LOGIC */
-  const generatePDF = () => {
+  /* PDF GENERATOR WITH PHOTOS AND THEME */
+  const generatePDF = async () => {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
+    let yPos = 20;
+
+    // Header Red Bar
+    doc.setFillColor(220, 38, 38);
+    doc.rect(0, 0, 210, 40, 'F');
     
-    doc.setFontSize(22);
-    doc.setTextColor(220, 38, 38);
-    doc.text("STS QAQC INSPECTION REPORT", 20, 20);
+    doc.setFontSize(24);
+    doc.setTextColor(255, 255, 255);
+    doc.text("STS QAQC REPORT", 20, 28);
     
-    doc.setFontSize(12);
+    yPos = 55;
     doc.setTextColor(0, 0, 0);
-    doc.text(`System ID: ${active.id}`, 20, 35);
-    doc.text(`Description: ${active.description}`, 20, 42);
-    doc.text(`Inspector: ${user.email}`, 20, 49);
-    doc.text(`Date: ${new Date().toLocaleString()}`, 20, 56);
+    doc.setFontSize(10);
+    doc.text(`SYSTEM ID:`, 20, yPos);
+    doc.setFont(undefined, 'bold');
+    doc.text(`${active.id}`, 50, yPos);
     
-    doc.line(20, 62, 190, 62);
-    
+    yPos += 7;
+    doc.setFont(undefined, 'normal');
+    doc.text(`INSPECTOR:`, 20, yPos);
+    doc.text(`${user.email}`, 50, yPos);
+
+    yPos += 7;
+    doc.text(`DATE:`, 20, yPos);
+    doc.text(`${new Date().toLocaleString()}`, 50, yPos);
+
+    yPos += 15;
+    doc.setDrawColor(220, 38, 38);
+    doc.setLineWidth(1);
+    doc.line(20, yPos, 190, yPos);
+
+    yPos += 12;
     doc.setFontSize(14);
-    doc.text("Inspection Notes:", 20, 72);
+    doc.setTextColor(220, 38, 38);
+    doc.text("INSPECTION NOTES", 20, yPos);
+    
+    yPos += 8;
     doc.setFontSize(11);
+    doc.setTextColor(40, 40, 40);
+    doc.setFont(undefined, 'normal');
     const splitNotes = doc.splitTextToSize(notes || "No notes provided.", 170);
-    doc.text(splitNotes, 20, 80);
+    doc.text(splitNotes, 20, yPos);
+    
+    yPos += (splitNotes.length * 7) + 10;
+
+    // Photos Section
+    if (photos.length > 0) {
+      doc.setFontSize(14);
+      doc.setTextColor(220, 38, 38);
+      doc.text("ATTACHED PHOTOS", 20, yPos);
+      yPos += 10;
+
+      for (const [index, photo] of photos.entries()) {
+        if (yPos > 240) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        try {
+          const img = new Image();
+          img.src = photo.url;
+          await new Promise((resolve) => { img.onload = resolve; });
+          
+          // Basic 2-column layout logic
+          const xPos = (index % 2 === 0) ? 20 : 110;
+          doc.addImage(img, 'JPEG', xPos, yPos, 80, 60);
+          doc.setFontSize(8);
+          doc.text(`Uploaded by: ${photo.uploader}`, xPos, yPos + 65);
+          
+          if (index % 2 !== 0) yPos += 80; 
+          else if (index === photos.length - 1) yPos += 80;
+        } catch (e) {
+          console.error("Image failed to load for PDF", e);
+        }
+      }
+    }
 
     doc.save(`STS_Report_${active.id}.pdf`);
     notify("PDF Generated!");
@@ -359,7 +403,6 @@ function Dashboard({ user }) {
         </div>
       </div>
 
-      {/* MOBILE QUICK ADD */}
       <button onClick={()=>setShowAdd(true)} className="lg:hidden fixed bottom-6 right-6 w-16 h-16 bg-red-600 text-white rounded-full shadow-2xl text-3xl font-bold flex items-center justify-center z-20 active:scale-90 transition-transform">
         +
       </button>
