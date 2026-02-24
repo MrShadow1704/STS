@@ -18,7 +18,7 @@ body { font-family: Inter, sans-serif; background:#fff; overflow-x:hidden; }
   from { opacity:0; transform:scale(.95); }
   to { opacity:1; transform:scale(1); }
 }
-.sidebarBtn { width:100%; text-align:left; padding:.75rem 1rem; border-radius:.75rem; transition: all 0.2s; }
+.sidebarBtn { width:100%; text-align:left; padding:.75rem 1rem; border-radius:.75rem; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
 .sidebarBtn:hover { background:#fee2e2; color:#b91c1c; }
 
 /* Web Unique Hover Effect */
@@ -30,6 +30,9 @@ body { font-family: Inter, sans-serif; background:#fff; overflow-x:hidden; }
     border-color: #ef4444;
   }
 }
+
+.worker-pop { transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); cursor: pointer; }
+.worker-pop:active { transform: scale(1.4); filter: drop-shadow(0 0 8px #ef4444); }
 
 .toast-in { animation: slideIn 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); }
 @keyframes slideIn {
@@ -58,7 +61,7 @@ function Auth({ onAuth }) {
   const [msg,setMsg]=useState("");
 
   async function submit(){
-    try{
+    try {
       if(mode==="signup"){
         await supabase.auth.signUp({email,password:pass});
         setMsg("Account created. Login now.");
@@ -68,17 +71,17 @@ function Auth({ onAuth }) {
         if(error) throw error;
         onAuth(data.user);
       }
-    }catch(e){ setMsg(e.message); }
+    } catch(e) { setMsg(e.message); }
   }
 
   return (
     <div className="h-screen flex items-center justify-center bg-slate-100 p-4">
       <div className="bg-white w-full max-w-md p-8 rounded-3xl shadow-xl fade-in">
         <h1 className="text-2xl font-bold text-center text-red-600">STS QAQC</h1>
-        <input className="w-full border p-3 rounded-xl mt-4" placeholder="Email" onChange={e=>setEmail(e.target.value)} />
+        <input className="w-full border p-3 rounded-xl mt-4 focus:ring-2 focus:ring-red-500 outline-none" placeholder="Email" onChange={e=>setEmail(e.target.value)} />
         <div className="relative mt-2">
-          <input type={showPass ? "text" : "password"} className="w-full border p-3 rounded-xl" placeholder="Password" onChange={e=>setPass(e.target.value)} />
-          <button onClick={()=>setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xl grayscale hover:grayscale-0 transition" title="Toggle Password">
+          <input type={showPass ? "text" : "password"} className="w-full border p-3 rounded-xl focus:ring-2 focus:ring-red-500 outline-none" placeholder="Password" onChange={e=>setPass(e.target.value)} />
+          <button type="button" onClick={()=>setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-2xl worker-pop">
             {showPass ? "👷‍♂️" : "👷"}
           </button>
         </div>
@@ -252,7 +255,7 @@ function Dashboard({ user }) {
         </div>
       )}
 
-      {/* MOBILE HEADER - INCREASED GAP */}
+      {/* MOBILE HEADER - BIGGER GAP */}
       <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b-2 p-8 flex justify-between items-center z-20 shadow-sm">
         <h1 className="font-black text-2xl text-red-600 tracking-tight">STS QAQC</h1>
         <button onClick={()=>setSidebarOpen(!sidebarOpen)} className="text-3xl p-2 -mr-2">☰</button>
@@ -263,15 +266,14 @@ function Dashboard({ user }) {
         <p className="text-xs text-gray-500 break-all mb-4">{user.email}</p>
         <button onClick={()=>setShowAdd(true)} className="bg-red-600 text-white py-3 rounded-2xl font-semibold mb-6 w-full hover:bg-red-700 shadow-md transition">+ Add System</button>
         <div className="flex flex-col gap-2 flex-1">
-          <button onClick={()=>{setFilter("all"); setSidebarOpen(false);}} className="sidebarBtn">📁 All Systems</button>
-          <button onClick={()=>{setFilter("completed"); setSidebarOpen(false);}} className="sidebarBtn">✅ Completed</button>
-          <button onClick={()=>{setFilter("not_completed"); setSidebarOpen(false);}} className="sidebarBtn">❌ Not Completed</button>
+          <button onClick={()=>{setFilter("all"); setSidebarOpen(false);}} className="sidebarBtn"><span>🏗️</span> All Systems</button>
+          <button onClick={()=>{setFilter("completed"); setSidebarOpen(false);}} className="sidebarBtn"><span>🏆</span> Completed</button>
+          <button onClick={()=>{setFilter("not_completed"); setSidebarOpen(false);}} className="sidebarBtn"><span>🚧</span> Not Completed</button>
         </div>
         <button onClick={()=>supabase.auth.signOut()} className="mt-6 w-full py-3 border text-red-600 rounded-xl font-bold hover:bg-red-50 transition">Logout</button>
       </div>
 
-      {/* MAIN - ADJUSTED MT FOR BIGGER HEADER GAP */}
-      <div className="flex-1 p-6 lg:p-10 overflow-y-auto mt-32 lg:mt-0">
+      <div className="flex-1 p-6 lg:p-10 overflow-y-auto mt-40 lg:mt-0">
         <div className="relative mb-6">
           <input className="w-full border-2 p-4 pr-12 rounded-2xl shadow-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
             placeholder="Search system number or description..."
@@ -286,21 +288,25 @@ function Dashboard({ user }) {
           {filtered.map(s=>(
             <div key={s.id} className="relative group fade-in">
               <div onClick={()=>setActive(s)}
-                className={`system-card cursor-pointer p-8 pb-14 rounded-3xl border shadow-sm h-full transition-all
+                className={`system-card cursor-pointer p-8 rounded-3xl border shadow-sm h-full transition-all
                 ${s.status==="completed"?"bg-green-50 border-green-200":"bg-white border-slate-200"}`}>
                 <h3 className="font-bold text-xl">{s.id}</h3>
                 <p className="text-sm text-gray-600 mt-2">{s.description}</p>
               </div>
               
-              {/* Permanent on Mobile, Hover on Web */}
               <button onClick={(e) => { e.stopPropagation(); setEditTarget({ ...s, originalId: s.id }); }}
-                className="absolute bottom-4 right-4 p-3 bg-white border shadow-sm rounded-2xl text-gray-600 hover:text-red-600 hover:border-red-200 transition-all flex items-center gap-1 active:scale-95 lg:opacity-0 lg:group-hover:opacity-100">
+                className="absolute top-4 right-4 p-2 bg-white/90 border shadow-sm rounded-full text-gray-500 hover:text-red-600 hover:border-red-200 transition-all active:scale-95 lg:opacity-0 lg:group-hover:opacity-100">
                 <span>✏️</span>
               </button>
             </div>
           ))}
         </div>
       </div>
+
+      {/* MOBILE QUICK ADD BUTTON */}
+      <button onClick={()=>setShowAdd(true)} className="lg:hidden fixed bottom-6 right-6 w-16 h-16 bg-red-600 text-white rounded-full shadow-2xl text-3xl font-bold flex items-center justify-center z-20 active:scale-90 transition-transform">
+        +
+      </button>
 
       {active && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-40 backdrop-blur-sm">
