@@ -21,7 +21,16 @@ body { font-family: Inter, sans-serif; background:#fff; overflow-x:hidden; }
 .sidebarBtn { width:100%; text-align:left; padding:.75rem 1rem; border-radius:.75rem; transition: all 0.2s; }
 .sidebarBtn:hover { background:#fee2e2; color:#b91c1c; }
 
-/* Creative Toast Animation */
+/* Web Unique Hover Effect */
+@media (min-width: 1024px) {
+  .system-card { transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+  .system-card:hover { 
+    transform: translateY(-8px); 
+    box-shadow: 0 20px 25px -5px rgba(220, 38, 38, 0.1), 0 10px 10px -5px rgba(220, 38, 38, 0.04);
+    border-color: #ef4444;
+  }
+}
+
 .toast-in { animation: slideIn 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); }
 @keyframes slideIn {
   from { transform: translateX(100%); opacity: 0; }
@@ -44,6 +53,7 @@ const supabase = window.supabase.createClient(SB_URL, SB_KEY);
 function Auth({ onAuth }) {
   const [email,setEmail]=useState("");
   const [pass,setPass]=useState("");
+  const [showPass, setShowPass]=useState(false);
   const [mode,setMode]=useState("login");
   const [msg,setMsg]=useState("");
 
@@ -66,7 +76,12 @@ function Auth({ onAuth }) {
       <div className="bg-white w-full max-w-md p-8 rounded-3xl shadow-xl fade-in">
         <h1 className="text-2xl font-bold text-center text-red-600">STS QAQC</h1>
         <input className="w-full border p-3 rounded-xl mt-4" placeholder="Email" onChange={e=>setEmail(e.target.value)} />
-        <input type="password" className="w-full border p-3 rounded-xl mt-2" placeholder="Password" onChange={e=>setPass(e.target.value)} />
+        <div className="relative mt-2">
+          <input type={showPass ? "text" : "password"} className="w-full border p-3 rounded-xl" placeholder="Password" onChange={e=>setPass(e.target.value)} />
+          <button onClick={()=>setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xl grayscale hover:grayscale-0 transition" title="Toggle Password">
+            {showPass ? "👷‍♂️" : "👷"}
+          </button>
+        </div>
         {msg && <p className="text-sm text-center mt-2 text-red-600">{msg}</p>}
         <button onClick={submit} className="w-full bg-red-600 text-white p-3 rounded-xl mt-4 font-bold hover:bg-red-700 transition">
           {mode==="login"?"Login":"Create Account"}
@@ -215,7 +230,6 @@ function Dashboard({ user }) {
   return (
     <div className="flex h-screen overflow-hidden bg-white">
       
-      {/* CREATIVE TOAST */}
       {toast && (
         <div className={`fixed top-5 right-5 z-[100] p-4 rounded-2xl shadow-2xl flex items-center gap-3 toast-in text-white font-bold
           ${toast.type === 'delete' ? 'bg-orange-500' : 'bg-green-600'}`}>
@@ -224,7 +238,6 @@ function Dashboard({ user }) {
         </div>
       )}
 
-      {/* CREATIVE CONFIRM MODAL */}
       {confirmData && (
         <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-3xl w-full max-w-xs shadow-2xl fade-in text-center">
@@ -239,13 +252,12 @@ function Dashboard({ user }) {
         </div>
       )}
 
-      {/* BIGGER MOBILE HEADER */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b-2 p-6 flex justify-between items-center z-20 shadow-sm">
+      {/* MOBILE HEADER - INCREASED GAP */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b-2 p-8 flex justify-between items-center z-20 shadow-sm">
         <h1 className="font-black text-2xl text-red-600 tracking-tight">STS QAQC</h1>
         <button onClick={()=>setSidebarOpen(!sidebarOpen)} className="text-3xl p-2 -mr-2">☰</button>
       </div>
 
-      {/* SIDEBAR */}
       <div className={`${sidebarOpen?'translate-x-0':'-translate-x-full'} lg:translate-x-0 fixed lg:relative z-30 w-72 h-full bg-white border-r p-6 transition-transform duration-300`}>
         <h1 className="text-2xl font-bold text-red-600 mb-2">STS QAQC</h1>
         <p className="text-xs text-gray-500 break-all mb-4">{user.email}</p>
@@ -258,8 +270,8 @@ function Dashboard({ user }) {
         <button onClick={()=>supabase.auth.signOut()} className="mt-6 w-full py-3 border text-red-600 rounded-xl font-bold hover:bg-red-50 transition">Logout</button>
       </div>
 
-      {/* MAIN */}
-      <div className="flex-1 p-6 lg:p-10 overflow-y-auto mt-20 lg:mt-0">
+      {/* MAIN - ADJUSTED MT FOR BIGGER HEADER GAP */}
+      <div className="flex-1 p-6 lg:p-10 overflow-y-auto mt-32 lg:mt-0">
         <div className="relative mb-6">
           <input className="w-full border-2 p-4 pr-12 rounded-2xl shadow-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
             placeholder="Search system number or description..."
@@ -272,18 +284,17 @@ function Dashboard({ user }) {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filtered.map(s=>(
-            <div key={s.id} className="relative fade-in">
+            <div key={s.id} className="relative group fade-in">
               <div onClick={()=>setActive(s)}
-                className={`cursor-pointer p-8 pb-14 rounded-3xl border shadow-sm h-full transition-all hover:shadow-md
+                className={`system-card cursor-pointer p-8 pb-14 rounded-3xl border shadow-sm h-full transition-all
                 ${s.status==="completed"?"bg-green-50 border-green-200":"bg-white border-slate-200"}`}>
                 <h3 className="font-bold text-xl">{s.id}</h3>
                 <p className="text-sm text-gray-600 mt-2">{s.description}</p>
               </div>
               
-              {/* Permanent Edit Button for Mobile, Hover for Desktop */}
+              {/* Permanent on Mobile, Hover on Web */}
               <button onClick={(e) => { e.stopPropagation(); setEditTarget({ ...s, originalId: s.id }); }}
-                className="absolute bottom-4 right-4 p-3 bg-white border shadow-sm rounded-2xl text-gray-600 hover:text-red-600 hover:border-red-200 transition-all flex items-center gap-1 active:scale-95 lg:opacity-0 lg:group-hover:opacity-100 group">
-                <span className="text-xs font-bold lg:hidden">Edit</span>
+                className="absolute bottom-4 right-4 p-3 bg-white border shadow-sm rounded-2xl text-gray-600 hover:text-red-600 hover:border-red-200 transition-all flex items-center gap-1 active:scale-95 lg:opacity-0 lg:group-hover:opacity-100">
                 <span>✏️</span>
               </button>
             </div>
@@ -291,7 +302,6 @@ function Dashboard({ user }) {
         </div>
       </div>
 
-      {/* SYSTEM MODAL */}
       {active && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-40 backdrop-blur-sm">
           <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] fade-in">
@@ -327,7 +337,6 @@ function Dashboard({ user }) {
         </div>
       )}
 
-      {/* ADD/EDIT MODALS (Remained Same Logic) */}
       {showAdd && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl fade-in">
