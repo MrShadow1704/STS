@@ -93,10 +93,10 @@ function Dashboard({ user }) {
   const [desc,setDesc]=useState("");
   const [sidebarOpen,setSidebarOpen]=useState(false);
   const [toast, setToast] = useState(null);
+  const [confirmData, setConfirmData] = useState(null);
 
   useEffect(()=>{ loadSystems(); },[]);
 
-  // Creative Toast Helper
   const notify = (msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
@@ -110,7 +110,6 @@ function Dashboard({ user }) {
   async function loadPhotos(id){
     const {data}=await supabase.storage.from("photos").list(id);
     if(!data){ setPhotos([]); return; }
-
     setPhotos(data.map(f=>{
       const parts=f.name.split("_");
       return {
@@ -137,32 +136,27 @@ function Dashboard({ user }) {
         await supabase.storage.from("photos").upload(path,f);
       }
     }
-
     const hasContent = notes.trim() || photos.length || input.files.length;
-
     await supabase.from("systems")
       .update({ notes, status: hasContent ? "completed" : "not_completed" })
       .eq("id",active.id);
-
     notify("System saved successfully!");
     setActive(null);
     loadSystems();
   }
 
-  async function deletePhoto(photo){
-    if(!confirm("Delete this photo?")) return;
-    await supabase.storage.from("photos").remove([`${active.id}/${photo.name}`]);
-    await loadPhotos(active.id);
-
-    if(!notes.trim()){
-      const {data}=await supabase.storage.from("photos").list(active.id);
-      if(!data || !data.length){
-        await supabase.from("systems").update({status:"not_completed"}).eq("id",active.id);
-        loadSystems();
+  const handleDeletePhoto = (photo) => {
+    setConfirmData({
+      title: "Delete Photo?",
+      msg: "This image will be permanently removed.",
+      onConfirm: async () => {
+        await supabase.storage.from("photos").remove([`${active.id}/${photo.name}`]);
+        await loadPhotos(active.id);
+        notify("Photo deleted", "delete");
+        setConfirmData(null);
       }
-    }
-    notify("Photo deleted", "delete");
-  }
+    });
+  };
 
   async function createSystem(){
     if(!newId.trim()) return;
@@ -186,15 +180,20 @@ function Dashboard({ user }) {
     notify("System updated!");
   }
 
-  async function deleteSystem() {
-    if(!confirm(`Are you sure you want to delete system ${editTarget.originalId}? This action cannot be undone.`)) return;
-    await supabase.from("systems").delete().eq("id", editTarget.originalId);
-    setEditTarget(null);
-    loadSystems();
-    notify("System deleted", "delete");
-  }
+  const handleDeleteSystem = () => {
+    setConfirmData({
+      title: "Delete System?",
+      msg: `Delete system ${editTarget.originalId}? All data will be lost.`,
+      onConfirm: async () => {
+        await supabase.from("systems").delete().eq("id", editTarget.originalId);
+        setEditTarget(null);
+        loadSystems();
+        notify("System deleted", "delete");
+        setConfirmData(null);
+      }
+    });
+  };
 
-  // File Download Helper (Prevents opening in new tab)
   const forceDownload = async (url, filename) => {
     const res = await fetch(url);
     const blob = await res.blob();
@@ -225,62 +224,67 @@ function Dashboard({ user }) {
         </div>
       )}
 
-      {/* MOBILE HEADER */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b p-4 flex justify-between z-20">
-        <h1 className="font-bold text-red-600">STS QAQC</h1>
-        <button onClick={()=>setSidebarOpen(!sidebarOpen)} className="text-2xl">☰</button>
+      {/* CREATIVE CONFIRM MODAL */}
+      {confirmData && (
+        <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white p-8 rounded-3xl w-full max-w-xs shadow-2xl fade-in text-center">
+            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">⚠️</div>
+            <h2 className="text-xl font-bold mb-2">{confirmData.title}</h2>
+            <p className="text-sm text-gray-500 mb-6">{confirmData.msg}</p>
+            <div className="flex flex-col gap-2">
+              <button onClick={confirmData.onConfirm} className="w-full bg-red-600 text-white py-3 rounded-2xl font-bold hover:bg-red-700 transition">Yes, Delete</button>
+              <button onClick={() => setConfirmData(null)} className="w-full bg-gray-100 text-gray-700 py-3 rounded-2xl font-bold hover:bg-gray-200 transition">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BIGGER MOBILE HEADER */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b-2 p-6 flex justify-between items-center z-20 shadow-sm">
+        <h1 className="font-black text-2xl text-red-600 tracking-tight">STS QAQC</h1>
+        <button onClick={()=>setSidebarOpen(!sidebarOpen)} className="text-3xl p-2 -mr-2">☰</button>
       </div>
 
       {/* SIDEBAR */}
       <div className={`${sidebarOpen?'translate-x-0':'-translate-x-full'} lg:translate-x-0 fixed lg:relative z-30 w-72 h-full bg-white border-r p-6 transition-transform duration-300`}>
         <h1 className="text-2xl font-bold text-red-600 mb-2">STS QAQC</h1>
         <p className="text-xs text-gray-500 break-all mb-4">{user.email}</p>
-
-        <button onClick={()=>setShowAdd(true)} className="bg-red-600 text-white py-3 rounded-2xl font-semibold mb-6 w-full hover:bg-red-700 shadow-md transition">
-          + Add System
-        </button>
-
+        <button onClick={()=>setShowAdd(true)} className="bg-red-600 text-white py-3 rounded-2xl font-semibold mb-6 w-full hover:bg-red-700 shadow-md transition">+ Add System</button>
         <div className="flex flex-col gap-2 flex-1">
           <button onClick={()=>{setFilter("all"); setSidebarOpen(false);}} className="sidebarBtn">📁 All Systems</button>
           <button onClick={()=>{setFilter("completed"); setSidebarOpen(false);}} className="sidebarBtn">✅ Completed</button>
           <button onClick={()=>{setFilter("not_completed"); setSidebarOpen(false);}} className="sidebarBtn">❌ Not Completed</button>
         </div>
-
-        <button onClick={()=>supabase.auth.signOut()} className="mt-6 w-full py-3 border text-red-600 rounded-xl font-bold hover:bg-red-50 transition">
-          Logout
-        </button>
+        <button onClick={()=>supabase.auth.signOut()} className="mt-6 w-full py-3 border text-red-600 rounded-xl font-bold hover:bg-red-50 transition">Logout</button>
       </div>
 
       {/* MAIN */}
-      <div className="flex-1 p-6 lg:p-10 overflow-y-auto mt-14 lg:mt-0">
+      <div className="flex-1 p-6 lg:p-10 overflow-y-auto mt-20 lg:mt-0">
         <div className="relative mb-6">
-          <input className="w-full border p-4 pr-12 rounded-2xl shadow-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+          <input className="w-full border-2 p-4 pr-12 rounded-2xl shadow-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
             placeholder="Search system number or description..."
             value={search}
             onChange={e=>setSearch(e.target.value)} />
           {search && (
-            <button 
-              onClick={() => setSearch("")}
-              className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-red-100 hover:text-red-600 transition-colors"
-            >
-              ✕
-            </button>
+            <button onClick={() => setSearch("")} className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-red-100 hover:text-red-600 transition-colors">✕</button>
           )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filtered.map(s=>(
-            <div key={s.id} className="relative group fade-in">
+            <div key={s.id} className="relative fade-in">
               <div onClick={()=>setActive(s)}
-                className={`cursor-pointer p-8 rounded-3xl border shadow-sm h-full transition-all hover:shadow-md
+                className={`cursor-pointer p-8 pb-14 rounded-3xl border shadow-sm h-full transition-all hover:shadow-md
                 ${s.status==="completed"?"bg-green-50 border-green-200":"bg-white border-slate-200"}`}>
                 <h3 className="font-bold text-xl">{s.id}</h3>
                 <p className="text-sm text-gray-600 mt-2">{s.description}</p>
               </div>
-              <button 
-                onClick={(e) => { e.stopPropagation(); setEditTarget({ ...s, originalId: s.id }); }}
-                className="absolute top-4 right-4 p-2 bg-white/90 rounded-full shadow hover:bg-red-100 text-gray-500 hover:text-red-600 transition opacity-0 group-hover:opacity-100">
-                ✏️
+              
+              {/* Permanent Edit Button for Mobile, Hover for Desktop */}
+              <button onClick={(e) => { e.stopPropagation(); setEditTarget({ ...s, originalId: s.id }); }}
+                className="absolute bottom-4 right-4 p-3 bg-white border shadow-sm rounded-2xl text-gray-600 hover:text-red-600 hover:border-red-200 transition-all flex items-center gap-1 active:scale-95 lg:opacity-0 lg:group-hover:opacity-100 group">
+                <span className="text-xs font-bold lg:hidden">Edit</span>
+                <span>✏️</span>
               </button>
             </div>
           ))}
@@ -291,20 +295,14 @@ function Dashboard({ user }) {
       {active && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-40 backdrop-blur-sm">
           <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] fade-in">
-            <div className="bg-red-600 text-white p-6 rounded-t-3xl">
-              <h2 className="text-xl font-bold">{active.id}</h2>
-            </div>
-
+            <div className="bg-red-600 text-white p-6 rounded-t-3xl"><h2 className="text-xl font-bold">{active.id}</h2></div>
             <div className="p-6 overflow-y-auto space-y-4 flex-1">
               <textarea value={notes} onChange={e=>setNotes(e.target.value)}
-                className="w-full border p-4 rounded-2xl h-32 focus:ring-2 focus:ring-red-500 outline-none"
-                placeholder="Inspection notes..." />
-
+                className="w-full border p-4 rounded-2xl h-32 focus:ring-2 focus:ring-red-500 outline-none" placeholder="Inspection notes..." />
               <div className="border-2 border-dashed border-gray-200 p-4 rounded-2xl">
                 <p className="text-sm font-semibold mb-2">Upload Photos</p>
                 <input id="file-upload" type="file" multiple className="text-sm" />
               </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {photos.map(p=>(
                   <div key={p.name} className="border rounded-2xl p-3 bg-slate-50">
@@ -314,42 +312,28 @@ function Dashboard({ user }) {
                     <p className="text-[10px] text-gray-400 font-mono">{p.timestamp}</p>
                     <p className="text-xs font-semibold truncate">{p.uploader}</p>
                     <div className="flex gap-2 mt-3">
-                      <button 
-                        onClick={() => forceDownload(p.url, p.name)} 
-                        className="flex-1 bg-red-500 text-white text-xs py-2 rounded-lg text-center font-bold hover:bg-red-600 transition"
-                      >
-                        Download
-                      </button>
-                      <button onClick={()=>deletePhoto(p)} className="flex-1 bg-gray-200 text-gray-700 text-xs py-2 rounded-lg font-bold hover:bg-gray-300 transition">Delete</button>
+                      <button onClick={() => forceDownload(p.url, p.name)} className="flex-1 bg-red-500 text-white text-xs py-2 rounded-lg text-center font-bold hover:bg-red-600 transition">Download</button>
+                      <button onClick={()=>handleDeletePhoto(p)} className="flex-1 bg-gray-200 text-gray-700 text-xs py-2 rounded-lg font-bold hover:bg-gray-300 transition">Delete</button>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-
             <div className="p-6 border-t flex gap-3">
               <button onClick={()=>setActive(null)} className="flex-1 py-3 bg-gray-100 rounded-2xl hover:bg-gray-200 transition">Close</button>
-              <button onClick={save} className="flex-1 py-3 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 shadow-lg transition">
-                Save & Complete
-              </button>
+              <button onClick={save} className="flex-1 py-3 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 shadow-lg transition">Save & Complete</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ADD SYSTEM MODAL */}
+      {/* ADD/EDIT MODALS (Remained Same Logic) */}
       {showAdd && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl fade-in">
             <h2 className="text-xl font-bold mb-4 text-center">New System</h2>
-            <input className="w-full border p-4 rounded-2xl mb-3 text-center font-bold outline-none focus:ring-2 focus:ring-red-500"
-              placeholder="System Number"
-              value={newId}
-              onChange={e=>setNewId(e.target.value)} />
-            <input className="w-full border p-4 rounded-2xl mb-6 text-center outline-none focus:ring-2 focus:ring-red-500"
-              placeholder="Description"
-              value={desc}
-              onChange={e=>setDesc(e.target.value)} />
+            <input className="w-full border p-4 rounded-2xl mb-3 text-center font-bold outline-none focus:ring-2 focus:ring-red-500" placeholder="System Number" value={newId} onChange={e=>setNewId(e.target.value)} />
+            <input className="w-full border p-4 rounded-2xl mb-6 text-center outline-none focus:ring-2 focus:ring-red-500" placeholder="Description" value={desc} onChange={e=>setDesc(e.target.value)} />
             <div className="flex gap-2">
                 <button onClick={()=>setShowAdd(false)} className="flex-1 bg-gray-100 py-3 rounded-2xl hover:bg-gray-200 transition">Cancel</button>
                 <button onClick={createSystem} className="flex-1 bg-red-600 text-white py-3 rounded-2xl font-bold hover:bg-red-700 transition">Add</button>
@@ -358,31 +342,17 @@ function Dashboard({ user }) {
         </div>
       )}
 
-      {/* EDIT SYSTEM MODAL */}
       {editTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl fade-in">
             <h2 className="text-xl font-bold mb-4 text-center text-red-600">Edit System</h2>
-            <p className="text-[10px] text-center text-gray-400 mb-2 uppercase tracking-widest">Editing ID: {editTarget.originalId}</p>
-            <input className="w-full border p-4 rounded-2xl mb-3 text-center font-bold outline-none focus:ring-2 focus:ring-red-500"
-              placeholder="System Number"
-              value={editTarget.id}
-              onChange={e=>setEditTarget({...editTarget, id: e.target.value})} />
-            <input className="w-full border p-4 rounded-2xl mb-6 text-center outline-none focus:ring-2 focus:ring-red-500"
-              placeholder="Description"
-              value={editTarget.description}
-              onChange={e=>setEditTarget({...editTarget, description: e.target.value})} />
-            
+            <p className="text-[10px] text-center text-gray-400 mb-2 uppercase tracking-widest">Editing: {editTarget.originalId}</p>
+            <input className="w-full border p-4 rounded-2xl mb-3 text-center font-bold outline-none focus:ring-2 focus:ring-red-500" placeholder="System Number" value={editTarget.id} onChange={e=>setEditTarget({...editTarget, id: e.target.value})} />
+            <input className="w-full border p-4 rounded-2xl mb-6 text-center outline-none focus:ring-2 focus:ring-red-500" placeholder="Description" value={editTarget.description} onChange={e=>setEditTarget({...editTarget, description: e.target.value})} />
             <div className="space-y-3">
-                <button onClick={updateSystem} className="w-full bg-red-600 text-white py-3 rounded-2xl font-bold hover:bg-red-700 transition">
-                  Update System
-                </button>
-                <button onClick={deleteSystem} className="w-full bg-red-50 text-red-600 py-3 rounded-2xl font-bold hover:bg-red-100 transition">
-                  Delete System
-                </button>
-                <button onClick={()=>setEditTarget(null)} className="w-full text-gray-500 py-2 text-sm hover:underline">
-                  Cancel
-                </button>
+                <button onClick={updateSystem} className="w-full bg-red-600 text-white py-3 rounded-2xl font-bold hover:bg-red-700 transition">Update System</button>
+                <button onClick={handleDeleteSystem} className="w-full bg-red-50 text-red-600 py-3 rounded-2xl font-bold hover:bg-red-100 transition">Delete System</button>
+                <button onClick={()=>setEditTarget(null)} className="w-full text-gray-500 py-2 text-sm hover:underline">Cancel</button>
             </div>
           </div>
         </div>
