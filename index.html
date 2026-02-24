@@ -15,7 +15,10 @@
 <style>
 body { font-family: Inter, sans-serif; background:#fff; overflow-x:hidden; }
 .fade-in { animation: fadeIn .25s ease-out; }
-@keyframes fadeIn { from { opacity:0; transform:scale(.95); } to { opacity:1; transform:scale(1); } }
+@keyframes fadeIn {
+  from { opacity:0; transform:scale(.95); }
+  to { opacity:1; transform:scale(1); }
+}
 .sidebarBtn { width:100%; text-align:left; padding:.75rem 1rem; border-radius:.75rem; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
 .sidebarBtn:hover { background:#fee2e2; color:#b91c1c; }
 
@@ -28,26 +31,22 @@ body { font-family: Inter, sans-serif; background:#fff; overflow-x:hidden; }
   }
 }
 
-/* Crane Password Animation */
-.crane-wrapper { position: relative; width: 50px; height: 40px; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: visible; }
-.crane-body { font-size: 24px; position: absolute; left: 0; z-index: 1; }
-.crane-slab { 
+/* Hands Covering Eyes Animation */
+.worker-wrapper { position: relative; width: 40px; height: 40px; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.worker-emoji { font-size: 24px; transition: all 0.3s; }
+.worker-hands { 
     position: absolute; 
-    background: #ef4444; 
-    height: 6px; 
-    width: 24px; 
-    right: 4px; 
-    border-radius: 2px;
-    transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-    z-index: 3;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    font-size: 20px; 
+    bottom: -20px; 
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
 }
-.crane-slab.lifted { transform: translateY(-18px); opacity: 0.3; }
-.crane-slab.lowered { transform: translateY(0px); opacity: 1; }
-.worker-small { font-size: 18px; position: absolute; right: 8px; z-index: 2; }
+.worker-hands.covering { bottom: 6px; }
 
 .toast-in { animation: slideIn 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); }
-@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
 </style>
 </head>
 
@@ -86,14 +85,13 @@ function Auth({ onAuth }) {
   return (
     <div className="h-screen flex items-center justify-center bg-slate-100 p-4">
       <div className="bg-white w-full max-w-md p-8 rounded-3xl shadow-xl fade-in">
-        <h1 className="text-2xl font-bold text-center text-red-600 uppercase tracking-tighter italic">STS QAQC</h1>
+        <h1 className="text-2xl font-bold text-center text-red-600 uppercase tracking-tighter">STS QAQC</h1>
         <input className="w-full border p-3 rounded-xl mt-4 focus:ring-2 focus:ring-red-500 outline-none" placeholder="Email" onChange={e=>setEmail(e.target.value)} />
         <div className="relative mt-2">
           <input type={showPass ? "text" : "password"} className="w-full border p-3 rounded-xl focus:ring-2 focus:ring-red-500 outline-none" placeholder="Password" onChange={e=>setPass(e.target.value)} />
-          <button type="button" onClick={()=>setShowPass(!showPass)} className="absolute right-2 top-1/2 -translate-y-1/2 crane-wrapper">
-             <span className="crane-body">🏗️</span>
-             <span className="worker-small">👷</span>
-             <div className={`crane-slab ${showPass ? 'lifted' : 'lowered'}`}></div>
+          <button type="button" onClick={()=>setShowPass(!showPass)} className="absolute right-2 top-1/2 -translate-y-1/2 worker-wrapper">
+             <span className="worker-emoji">👷</span>
+             <span className={`worker-hands ${!showPass ? 'covering' : ''}`}>👐</span>
           </button>
         </div>
         {msg && <p className="text-sm text-center mt-2 text-red-600 font-bold">{msg}</p>}
@@ -158,100 +156,50 @@ function Dashboard({ user }) {
     }
   },[active]);
 
+  /* VOICE TO TEXT LOGIC */
   const startListening = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return alert("Browser not supported.");
+    if (!SpeechRecognition) {
+      alert("Your browser does not support voice recognition.");
+      return;
+    }
     const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
     recognition.onstart = () => setIsListening(true);
-    recognition.onresult = (e) => setNotes(prev => prev + " " + e.results[0][0].transcript);
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setNotes(prev => prev + (prev ? " " : "") + transcript);
+    };
     recognition.onend = () => setIsListening(false);
     recognition.start();
   };
 
-  /* CREATIVE PDF GENERATOR WITH PHOTOS */
-  const generatePDF = async () => {
+  /* PDF GENERATOR LOGIC */
+  const generatePDF = () => {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     
-    // Header Branding
-    doc.setFillColor(220, 38, 38);
-    doc.rect(0, 0, 210, 40, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(24);
-    doc.setFont("helvetica", "bold");
-    doc.text("STS QAQC REPORT", 20, 26);
-    doc.setFontSize(10);
-    doc.text(`DATE: ${new Date().toLocaleDateString()} | REF: ${active.id}`, 20, 34);
-
-    // Body Info
+    doc.setFontSize(22);
+    doc.setTextColor(220, 38, 38);
+    doc.text("STS QAQC INSPECTION REPORT", 20, 20);
+    
+    doc.setFontSize(12);
     doc.setTextColor(0, 0, 0);
-    doc.setFontSize(12);
-    doc.text("SYSTEM DETAILS", 20, 55);
-    doc.line(20, 57, 190, 57);
+    doc.text(`System ID: ${active.id}`, 20, 35);
+    doc.text(`Description: ${active.description}`, 20, 42);
+    doc.text(`Inspector: ${user.email}`, 20, 49);
+    doc.text(`Date: ${new Date().toLocaleString()}`, 20, 56);
     
-    doc.setFontSize(10);
-    doc.text(`SYSTEM ID:`, 20, 65);
-    doc.setFont("helvetica", "bold");
-    doc.text(active.id, 60, 65);
+    doc.line(20, 62, 190, 62);
     
-    doc.setFont("helvetica", "normal");
-    doc.text(`DESCRIPTION:`, 20, 72);
-    doc.text(active.description || "N/A", 60, 72);
-    
-    doc.text(`INSPECTOR:`, 20, 79);
-    doc.text(user.email, 60, 79);
-
-    doc.setFontSize(12);
-    doc.text("INSPECTION NOTES", 20, 95);
-    doc.line(20, 97, 190, 97);
-    doc.setFontSize(10);
+    doc.setFontSize(14);
+    doc.text("Inspection Notes:", 20, 72);
+    doc.setFontSize(11);
     const splitNotes = doc.splitTextToSize(notes || "No notes provided.", 170);
-    doc.text(splitNotes, 20, 105);
+    doc.text(splitNotes, 20, 80);
 
-    // Photo Gallery Section
-    if (photos.length > 0) {
-      doc.addPage();
-      doc.setFillColor(220, 38, 38);
-      doc.rect(0, 0, 210, 20, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.text("PHOTO EVIDENCE GALLERY", 20, 13);
-      
-      let x = 20;
-      let y = 30;
-      const imgWidth = 80;
-      const imgHeight = 60;
-
-      for (let i = 0; i < photos.length; i++) {
-        try {
-          // Convert URL to Base64 for PDF
-          const img = await fetch(photos[i].url);
-          const blob = await img.blob();
-          const reader = new FileReader();
-          const base64data = await new Promise(resolve => {
-            reader.readAsDataURL(blob);
-            reader.onloadend = () => resolve(reader.result);
-          });
-
-          doc.addImage(base64data, "JPEG", x, y, imgWidth, imgHeight);
-          doc.setTextColor(100, 100, 100);
-          doc.setFontSize(8);
-          doc.text(`Uploader: ${photos[i].uploader}`, x, y + imgHeight + 5);
-          
-          x += 90;
-          if (x > 120) {
-            x = 20;
-            y += 85;
-          }
-          if (y > 240 && i < photos.length - 1) {
-            doc.addPage();
-            y = 30;
-          }
-        } catch (err) { console.error("Img error", err); }
-      }
-    }
-
-    doc.save(`STS_REPORT_${active.id}.pdf`);
-    notify("Professional Report Generated!");
+    doc.save(`STS_Report_${active.id}.pdf`);
+    notify("PDF Generated!");
   };
 
   async function save(){
@@ -263,18 +211,22 @@ function Dashboard({ user }) {
       }
     }
     const hasContent = notes.trim() || photos.length || input.files.length;
-    await supabase.from("systems").update({ notes, status: hasContent ? "completed" : "not_completed" }).eq("id",active.id);
-    notify("Progress Locked!"); setActive(null); loadSystems();
+    await supabase.from("systems")
+      .update({ notes, status: hasContent ? "completed" : "not_completed" })
+      .eq("id",active.id);
+    notify("System saved successfully!");
+    setActive(null);
+    loadSystems();
   }
 
   const handleDeletePhoto = (photo) => {
     setConfirmData({
       title: "Delete Photo?",
-      msg: "Permanently remove this evidence?",
+      msg: "This image will be permanently removed.",
       onConfirm: async () => {
         await supabase.storage.from("photos").remove([`${active.id}/${photo.name}`]);
         await loadPhotos(active.id);
-        notify("Photo Purged", "delete");
+        notify("Photo deleted", "delete");
         setConfirmData(null);
       }
     });
@@ -282,24 +234,36 @@ function Dashboard({ user }) {
 
   async function createSystem(){
     if(!newId.trim()) return;
-    await supabase.from("systems").insert([{ id:newId.trim(), description:desc, notes:"", status:"not_completed" }]);
+    await supabase.from("systems").insert([{
+      id:newId.trim(),
+      description:desc,
+      notes:"",
+      status:"not_completed"
+    }]);
     setShowAdd(false); setNewId(""); setDesc(""); loadSystems();
-    notify("System Created!");
+    notify("New system added!");
   }
 
   async function updateSystem() {
     if(!editTarget.id.trim()) return;
-    await supabase.from("systems").update({ id: editTarget.id, description: editTarget.description }).eq("id", editTarget.originalId);
-    setEditTarget(null); loadSystems(); notify("Database Updated!");
+    await supabase.from("systems")
+      .update({ id: editTarget.id, description: editTarget.description })
+      .eq("id", editTarget.originalId);
+    setEditTarget(null);
+    loadSystems();
+    notify("System updated!");
   }
 
   const handleDeleteSystem = () => {
     setConfirmData({
-      title: "Destroy System Record?",
-      msg: `Ref: ${editTarget.originalId}`,
+      title: "Delete System?",
+      msg: `Delete system ${editTarget.originalId}? All data will be lost.`,
       onConfirm: async () => {
         await supabase.from("systems").delete().eq("id", editTarget.originalId);
-        setEditTarget(null); loadSystems(); notify("Record Deleted", "delete"); setConfirmData(null);
+        setEditTarget(null);
+        loadSystems();
+        notify("System deleted", "delete");
+        setConfirmData(null);
       }
     });
   };
@@ -309,18 +273,26 @@ function Dashboard({ user }) {
     const blob = await res.blob();
     const blobUrl = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = blobUrl; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
-  const filtered = systems.filter(s => (s.id.toLowerCase().includes(search.toLowerCase()) || s.description.toLowerCase().includes(search.toLowerCase())) && (filter==="all" || s.status===filter));
+  const filtered = systems.filter(s =>
+    (s.id.toLowerCase().includes(search.toLowerCase()) || 
+     s.description.toLowerCase().includes(search.toLowerCase())) &&
+    (filter==="all" || s.status===filter)
+  );
 
   return (
     <div className="flex h-screen overflow-hidden bg-white">
       
       {toast && (
         <div className={`fixed top-5 right-5 z-[100] p-4 rounded-2xl shadow-2xl flex items-center gap-3 toast-in text-white font-bold
-          ${toast.type === 'delete' ? 'bg-orange-500' : 'bg-red-600'}`}>
-          <span>{toast.type === 'delete' ? '🗑️' : '🏗️'}</span>
+          ${toast.type === 'delete' ? 'bg-orange-500' : 'bg-green-600'}`}>
+          <span>{toast.type === 'delete' ? '🗑️' : '🚀'}</span>
           {toast.msg}
         </div>
       )}
@@ -328,11 +300,12 @@ function Dashboard({ user }) {
       {confirmData && (
         <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-3xl w-full max-w-xs shadow-2xl fade-in text-center">
+            <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">⚠️</div>
             <h2 className="text-xl font-bold mb-2">{confirmData.title}</h2>
             <p className="text-sm text-gray-500 mb-6">{confirmData.msg}</p>
             <div className="flex flex-col gap-2">
-              <button onClick={confirmData.onConfirm} className="w-full bg-red-600 text-white py-3 rounded-2xl font-bold hover:bg-red-700 transition">Confirm Action</button>
-              <button onClick={() => setConfirmData(null)} className="w-full bg-gray-100 text-gray-700 py-3 rounded-2xl font-bold transition">Abort</button>
+              <button onClick={confirmData.onConfirm} className="w-full bg-red-600 text-white py-3 rounded-2xl font-bold hover:bg-red-700 transition">Yes, Delete</button>
+              <button onClick={() => setConfirmData(null)} className="w-full bg-gray-100 text-gray-700 py-3 rounded-2xl font-bold hover:bg-gray-200 transition">Cancel</button>
             </div>
           </div>
         </div>
@@ -340,28 +313,30 @@ function Dashboard({ user }) {
 
       {/* MOBILE HEADER */}
       <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b-2 p-8 flex justify-between items-center z-20 shadow-sm">
-        <h1 className="font-black text-2xl text-red-600 tracking-tighter italic">STS QAQC</h1>
+        <h1 className="font-black text-2xl text-red-600 tracking-tight">STS QAQC</h1>
         <button onClick={()=>setSidebarOpen(!sidebarOpen)} className="text-3xl p-2 -mr-2">☰</button>
       </div>
 
       <div className={`${sidebarOpen?'translate-x-0':'-translate-x-full'} lg:translate-x-0 fixed lg:relative z-30 w-72 h-full bg-white border-r p-6 transition-transform duration-300`}>
-        <h1 className="text-2xl font-bold text-red-600 mb-2 italic tracking-tight">STS QAQC</h1>
-        <p className="text-[10px] text-gray-400 font-bold uppercase mb-4 truncate">{user.email}</p>
-        <button onClick={()=>setShowAdd(true)} className="bg-red-600 text-white py-3 rounded-2xl font-semibold mb-6 w-full hover:bg-red-700 shadow-md transition">+ New System</button>
+        <h1 className="text-2xl font-bold text-red-600 mb-2">STS QAQC</h1>
+        <p className="text-xs text-gray-500 break-all mb-4">{user.email}</p>
+        <button onClick={()=>setShowAdd(true)} className="bg-red-600 text-white py-3 rounded-2xl font-semibold mb-6 w-full hover:bg-red-700 shadow-md transition">+ Add System</button>
         <div className="flex flex-col gap-2 flex-1">
-          <button onClick={()=>{setFilter("all"); setSidebarOpen(false);}} className="sidebarBtn"><span>🏢</span> Portfolio</button>
-          <button onClick={()=>{setFilter("completed"); setSidebarOpen(false);}} className="sidebarBtn"><span>✅</span> Inspected</button>
-          <button onClick={()=>{setFilter("not_completed"); setSidebarOpen(false);}} className="sidebarBtn"><span>🛠️</span> Pending</button>
+          <button onClick={()=>{setFilter("all"); setSidebarOpen(false);}} className="sidebarBtn"><span>🏗️</span> All Systems</button>
+          <button onClick={()=>{setFilter("completed"); setSidebarOpen(false);}} className="sidebarBtn"><span>🏆</span> Completed</button>
+          <button onClick={()=>{setFilter("not_completed"); setSidebarOpen(false);}} className="sidebarBtn"><span>🚧</span> Not Completed</button>
         </div>
-        <button onClick={()=>supabase.auth.signOut()} className="mt-6 w-full py-3 border border-red-100 text-red-600 rounded-xl font-bold hover:bg-red-50 transition">Logout</button>
+        <button onClick={()=>supabase.auth.signOut()} className="mt-6 w-full py-3 border text-red-600 rounded-xl font-bold hover:bg-red-50 transition">Logout</button>
       </div>
 
       <div className="flex-1 p-6 lg:p-10 overflow-y-auto mt-40 lg:mt-0">
         <div className="relative mb-6">
-          <input className="w-full border-2 p-4 pr-12 rounded-2xl shadow-sm focus:ring-2 focus:ring-red-500 outline-none transition-all font-medium"
-            placeholder="Search system matrix..." value={search} onChange={e=>setSearch(e.target.value)} />
+          <input className="w-full border-2 p-4 pr-12 rounded-2xl shadow-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+            placeholder="Search system number or description..."
+            value={search}
+            onChange={e=>setSearch(e.target.value)} />
           {search && (
-            <button onClick={() => setSearch("")} className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 font-bold">✕</button>
+            <button onClick={() => setSearch("")} className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-red-100 hover:text-red-600 transition-colors">✕</button>
           )}
         </div>
 
@@ -371,59 +346,64 @@ function Dashboard({ user }) {
               <div onClick={()=>setActive(s)}
                 className={`system-card cursor-pointer p-8 rounded-3xl border shadow-sm h-full transition-all
                 ${s.status==="completed"?"bg-green-50 border-green-200":"bg-white border-slate-200"}`}>
-                <h3 className="font-bold text-xl tracking-tight text-slate-800">{s.id}</h3>
-                <p className="text-xs text-gray-500 font-semibold mt-2 uppercase tracking-wide">{s.description}</p>
+                <h3 className="font-bold text-xl">{s.id}</h3>
+                <p className="text-sm text-gray-600 mt-2">{s.description}</p>
               </div>
               
               <button onClick={(e) => { e.stopPropagation(); setEditTarget({ ...s, originalId: s.id }); }}
-                className="absolute top-4 right-4 p-2 bg-white/90 border shadow-sm rounded-full text-gray-400 hover:text-red-600 transition-all active:scale-95 lg:opacity-0 lg:group-hover:opacity-100">
-                <span>⚙️</span>
+                className="absolute top-4 right-4 p-2 bg-white/90 border shadow-sm rounded-full text-gray-500 hover:text-red-600 hover:border-red-200 transition-all active:scale-95 lg:opacity-0 lg:group-hover:opacity-100">
+                <span>✏️</span>
               </button>
             </div>
           ))}
         </div>
       </div>
 
+      {/* MOBILE QUICK ADD */}
+      <button onClick={()=>setShowAdd(true)} className="lg:hidden fixed bottom-6 right-6 w-16 h-16 bg-red-600 text-white rounded-full shadow-2xl text-3xl font-bold flex items-center justify-center z-20 active:scale-90 transition-transform">
+        +
+      </button>
+
       {active && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-40 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] fade-in overflow-hidden border-4 border-white">
-            <div className="bg-red-600 text-white p-6 flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                    <span className="text-2xl">👷</span>
-                    <h2 className="text-xl font-bold uppercase tracking-tighter italic">{active.id}</h2>
-                </div>
-                <button onClick={generatePDF} className="bg-white text-red-600 px-5 py-2 rounded-xl text-[10px] font-black hover:bg-red-50 transition shadow-lg">EXPORT REPORT</button>
+          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] fade-in">
+            <div className="bg-red-600 text-white p-6 rounded-t-3xl flex justify-between items-center">
+                <h2 className="text-xl font-bold">{active.id}</h2>
+                <button onClick={generatePDF} className="bg-white text-red-600 px-4 py-1.5 rounded-xl text-xs font-black hover:bg-red-50 transition">EXPORT PDF</button>
             </div>
-            <div className="p-6 overflow-y-auto space-y-4 flex-1 bg-slate-50">
+            <div className="p-6 overflow-y-auto space-y-4 flex-1">
               <div className="relative">
                 <textarea value={notes} onChange={e=>setNotes(e.target.value)}
-                    className="w-full border-2 p-4 rounded-2xl h-40 focus:ring-2 focus:ring-red-500 outline-none font-medium" placeholder="Technical inspection notes..." />
+                    className="w-full border p-4 rounded-2xl h-32 focus:ring-2 focus:ring-red-500 outline-none" placeholder="Inspection notes..." />
                 <button onClick={startListening} 
-                    className={`absolute bottom-3 right-3 p-3 rounded-full shadow-lg transition-all ${isListening ? 'bg-red-600 text-white scale-110' : 'bg-white text-gray-400'}`}>
-                    {isListening ? "📡" : "🎤"}
+                    className={`absolute bottom-3 right-3 p-3 rounded-full shadow-md transition ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>
+                    {isListening ? "⏹️" : "🎤"}
                 </button>
               </div>
               
-              <div className="bg-white p-5 rounded-2xl border-2 border-dashed border-red-100">
-                <p className="text-xs font-black text-red-600 mb-3 uppercase tracking-widest">Digital Evidence Capture</p>
-                <input id="file-upload" type="file" multiple className="text-xs font-bold" />
+              <div className="border-2 border-dashed border-gray-200 p-4 rounded-2xl">
+                <p className="text-sm font-semibold mb-2">Upload Photos</p>
+                <input id="file-upload" type="file" multiple className="text-sm" />
               </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {photos.map(p=>(
-                  <div key={p.name} className="border rounded-2xl p-3 bg-white shadow-sm group">
-                    <img src={p.url} className="rounded-xl mb-2 object-cover w-full h-40 shadow-inner" alt="Preview"/>
-                    <div className="flex justify-between items-center mt-2 px-1">
-                        <p className="text-[9px] text-gray-400 font-bold uppercase">{p.uploader.split('@')[0]}</p>
-                        <button onClick={()=>handleDeletePhoto(p)} className="text-gray-300 hover:text-red-500 transition">❌</button>
+                  <div key={p.name} className="border rounded-2xl p-3 bg-slate-50">
+                    <a href={p.url} target="_blank" rel="noopener noreferrer">
+                        <img src={p.url} className="rounded-lg mb-2 cursor-pointer hover:opacity-80 transition object-cover w-full h-40 shadow-sm" alt="Preview"/>
+                    </a>
+                    <p className="text-[10px] text-gray-400 font-mono">{p.timestamp}</p>
+                    <p className="text-xs font-semibold truncate">{p.uploader}</p>
+                    <div className="flex gap-2 mt-3">
+                      <button onClick={() => forceDownload(p.url, p.name)} className="flex-1 bg-red-500 text-white text-xs py-2 rounded-lg text-center font-bold hover:bg-red-600 transition">Download</button>
+                      <button onClick={()=>handleDeletePhoto(p)} className="flex-1 bg-gray-200 text-gray-700 text-xs py-2 rounded-lg font-bold hover:bg-gray-300 transition">Delete</button>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="p-6 bg-white border-t flex gap-3">
-              <button onClick={()=>setActive(null)} className="flex-1 py-3 bg-gray-50 rounded-2xl text-xs font-black uppercase tracking-widest text-gray-400 hover:bg-gray-100 transition">Cancel</button>
-              <button onClick={save} className="flex-1 py-3 bg-red-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-700 shadow-xl transition">Push to DB</button>
+            <div className="p-6 border-t flex gap-3">
+              <button onClick={()=>setActive(null)} className="flex-1 py-3 bg-gray-100 rounded-2xl hover:bg-gray-200 transition">Close</button>
+              <button onClick={save} className="flex-1 py-3 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 shadow-lg transition">Save & Complete</button>
             </div>
           </div>
         </div>
@@ -431,13 +411,13 @@ function Dashboard({ user }) {
 
       {showAdd && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl fade-in border-b-8 border-red-600">
-            <h2 className="text-xl font-bold mb-4 text-center italic tracking-tighter uppercase">Commission System</h2>
-            <input className="w-full border p-4 rounded-2xl mb-3 text-center font-bold outline-none focus:ring-2 focus:ring-red-500" placeholder="TAG NUMBER" value={newId} onChange={e=>setNewId(e.target.value)} />
-            <input className="w-full border p-4 rounded-2xl mb-6 text-center outline-none focus:ring-2 focus:ring-red-500 font-medium" placeholder="TECHNICAL DESC" value={desc} onChange={e=>setDesc(e.target.value)} />
+          <div className="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl fade-in">
+            <h2 className="text-xl font-bold mb-4 text-center">New System</h2>
+            <input className="w-full border p-4 rounded-2xl mb-3 text-center font-bold outline-none focus:ring-2 focus:ring-red-500" placeholder="System Number" value={newId} onChange={e=>setNewId(e.target.value)} />
+            <input className="w-full border p-4 rounded-2xl mb-6 text-center outline-none focus:ring-2 focus:ring-red-500" placeholder="Description" value={desc} onChange={e=>setDesc(e.target.value)} />
             <div className="flex gap-2">
-                <button onClick={()=>setShowAdd(false)} className="flex-1 bg-gray-100 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest">Abort</button>
-                <button onClick={createSystem} className="flex-1 bg-red-600 text-white py-3 rounded-2xl font-bold text-xs uppercase tracking-widest shadow-lg transition">Initialize</button>
+                <button onClick={()=>setShowAdd(false)} className="flex-1 bg-gray-100 py-3 rounded-2xl hover:bg-gray-200 transition">Cancel</button>
+                <button onClick={createSystem} className="flex-1 bg-red-600 text-white py-3 rounded-2xl font-bold hover:bg-red-700 transition">Add</button>
             </div>
           </div>
         </div>
@@ -446,13 +426,14 @@ function Dashboard({ user }) {
       {editTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl fade-in">
-            <h2 className="text-xl font-bold mb-4 text-center text-red-600 uppercase tracking-tighter italic">Edit Matrix</h2>
-            <input className="w-full border p-4 rounded-2xl mb-3 text-center font-bold outline-none focus:ring-2 focus:ring-red-500" placeholder="System ID" value={editTarget.id} onChange={e=>setEditTarget({...editTarget, id: e.target.value})} />
+            <h2 className="text-xl font-bold mb-4 text-center text-red-600 uppercase">Edit System</h2>
+            <p className="text-[10px] text-center text-gray-400 mb-2 uppercase tracking-widest">Editing: {editTarget.originalId}</p>
+            <input className="w-full border p-4 rounded-2xl mb-3 text-center font-bold outline-none focus:ring-2 focus:ring-red-500" placeholder="System Number" value={editTarget.id} onChange={e=>setEditTarget({...editTarget, id: e.target.value})} />
             <input className="w-full border p-4 rounded-2xl mb-6 text-center outline-none focus:ring-2 focus:ring-red-500" placeholder="Description" value={editTarget.description} onChange={e=>setEditTarget({...editTarget, description: e.target.value})} />
             <div className="space-y-3">
-                <button onClick={updateSystem} className="w-full bg-red-600 text-white py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg">Commit Change</button>
-                <button onClick={handleDeleteSystem} className="w-full bg-red-50 text-red-600 py-3 rounded-2xl font-black text-xs uppercase tracking-widest">Purge Record</button>
-                <button onClick={()=>setEditTarget(null)} className="w-full text-gray-400 py-2 text-[10px] font-black uppercase tracking-widest">Cancel</button>
+                <button onClick={updateSystem} className="w-full bg-red-600 text-white py-3 rounded-2xl font-bold hover:bg-red-700 transition">Update System</button>
+                <button onClick={handleDeleteSystem} className="w-full bg-red-50 text-red-600 py-3 rounded-2xl font-bold hover:bg-red-100 transition">Delete System</button>
+                <button onClick={()=>setEditTarget(null)} className="w-full text-gray-500 py-2 text-sm hover:underline">Cancel</button>
             </div>
           </div>
         </div>
