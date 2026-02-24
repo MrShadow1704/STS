@@ -10,6 +10,7 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 body { font-family: Inter, sans-serif; background:#fff; overflow-x:hidden; }
@@ -18,10 +19,29 @@ body { font-family: Inter, sans-serif; background:#fff; overflow-x:hidden; }
   from { opacity:0; transform:scale(.95); }
   to { opacity:1; transform:scale(1); }
 }
-.sidebarBtn { width:100%; text-align:left; padding:.75rem 1rem; border-radius:.75rem; transition: all 0.2s; }
+.sidebarBtn { width:100%; text-align:left; padding:.75rem 1rem; border-radius:.75rem; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
 .sidebarBtn:hover { background:#fee2e2; color:#b91c1c; }
 
-/* Creative Toast Animation */
+@media (min-width: 1024px) {
+  .system-card { transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+  .system-card:hover { 
+    transform: translateY(-8px); 
+    box-shadow: 0 20px 25px -5px rgba(220, 38, 38, 0.1), 0 10px 10px -5px rgba(220, 38, 38, 0.04);
+    border-color: #ef4444;
+  }
+}
+
+/* Hands Covering Eyes Animation */
+.worker-wrapper { position: relative; width: 40px; height: 40px; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.worker-emoji { font-size: 24px; transition: all 0.3s; }
+.worker-hands { 
+    position: absolute; 
+    font-size: 20px; 
+    bottom: -20px; 
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+}
+.worker-hands.covering { bottom: 6px; }
+
 .toast-in { animation: slideIn 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); }
 @keyframes slideIn {
   from { transform: translateX(100%); opacity: 0; }
@@ -44,11 +64,12 @@ const supabase = window.supabase.createClient(SB_URL, SB_KEY);
 function Auth({ onAuth }) {
   const [email,setEmail]=useState("");
   const [pass,setPass]=useState("");
+  const [showPass, setShowPass]=useState(false);
   const [mode,setMode]=useState("login");
   const [msg,setMsg]=useState("");
 
   async function submit(){
-    try{
+    try {
       if(mode==="signup"){
         await supabase.auth.signUp({email,password:pass});
         setMsg("Account created. Login now.");
@@ -58,20 +79,26 @@ function Auth({ onAuth }) {
         if(error) throw error;
         onAuth(data.user);
       }
-    }catch(e){ setMsg(e.message); }
+    } catch(e) { setMsg(e.message); }
   }
 
   return (
     <div className="h-screen flex items-center justify-center bg-slate-100 p-4">
       <div className="bg-white w-full max-w-md p-8 rounded-3xl shadow-xl fade-in">
-        <h1 className="text-2xl font-bold text-center text-red-600">STS QAQC</h1>
-        <input className="w-full border p-3 rounded-xl mt-4" placeholder="Email" onChange={e=>setEmail(e.target.value)} />
-        <input type="password" className="w-full border p-3 rounded-xl mt-2" placeholder="Password" onChange={e=>setPass(e.target.value)} />
-        {msg && <p className="text-sm text-center mt-2 text-red-600">{msg}</p>}
+        <h1 className="text-2xl font-bold text-center text-red-600 uppercase tracking-tighter">STS QAQC</h1>
+        <input className="w-full border p-3 rounded-xl mt-4 focus:ring-2 focus:ring-red-500 outline-none" placeholder="Email" onChange={e=>setEmail(e.target.value)} />
+        <div className="relative mt-2">
+          <input type={showPass ? "text" : "password"} className="w-full border p-3 rounded-xl focus:ring-2 focus:ring-red-500 outline-none" placeholder="Password" onChange={e=>setPass(e.target.value)} />
+          <button type="button" onClick={()=>setShowPass(!showPass)} className="absolute right-2 top-1/2 -translate-y-1/2 worker-wrapper">
+             <span className="worker-emoji">👷</span>
+             <span className={`worker-hands ${!showPass ? 'covering' : ''}`}>👐</span>
+          </button>
+        </div>
+        {msg && <p className="text-sm text-center mt-2 text-red-600 font-bold">{msg}</p>}
         <button onClick={submit} className="w-full bg-red-600 text-white p-3 rounded-xl mt-4 font-bold hover:bg-red-700 transition">
           {mode==="login"?"Login":"Create Account"}
         </button>
-        <button onClick={()=>setMode(mode==="login"?"signup":"login")} className="w-full text-sm text-red-600 mt-2">
+        <button onClick={()=>setMode(mode==="login"?"signup":"login")} className="w-full text-sm text-red-600 mt-2 font-medium">
           {mode==="login"?"Create Account":"Back to Login"}
         </button>
       </div>
@@ -93,7 +120,8 @@ function Dashboard({ user }) {
   const [desc,setDesc]=useState("");
   const [sidebarOpen,setSidebarOpen]=useState(false);
   const [toast, setToast] = useState(null);
-  const [confirmData, setConfirmData] = useState(null); // { title, msg, onConfirm }
+  const [confirmData, setConfirmData] = useState(null);
+  const [isListening, setIsListening] = useState(false);
 
   useEffect(()=>{ loadSystems(); },[]);
 
@@ -128,6 +156,52 @@ function Dashboard({ user }) {
     }
   },[active]);
 
+  /* VOICE TO TEXT LOGIC */
+  const startListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Your browser does not support voice recognition.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.onstart = () => setIsListening(true);
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setNotes(prev => prev + (prev ? " " : "") + transcript);
+    };
+    recognition.onend = () => setIsListening(false);
+    recognition.start();
+  };
+
+  /* PDF GENERATOR LOGIC */
+  const generatePDF = () => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    
+    doc.setFontSize(22);
+    doc.setTextColor(220, 38, 38);
+    doc.text("STS QAQC INSPECTION REPORT", 20, 20);
+    
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`System ID: ${active.id}`, 20, 35);
+    doc.text(`Description: ${active.description}`, 20, 42);
+    doc.text(`Inspector: ${user.email}`, 20, 49);
+    doc.text(`Date: ${new Date().toLocaleString()}`, 20, 56);
+    
+    doc.line(20, 62, 190, 62);
+    
+    doc.setFontSize(14);
+    doc.text("Inspection Notes:", 20, 72);
+    doc.setFontSize(11);
+    const splitNotes = doc.splitTextToSize(notes || "No notes provided.", 170);
+    doc.text(splitNotes, 20, 80);
+
+    doc.save(`STS_Report_${active.id}.pdf`);
+    notify("PDF Generated!");
+  };
+
   async function save(){
     const input=document.getElementById("file-upload");
     if(input.files.length){
@@ -148,17 +222,10 @@ function Dashboard({ user }) {
   const handleDeletePhoto = (photo) => {
     setConfirmData({
       title: "Delete Photo?",
-      msg: "This image will be permanently removed from the system.",
+      msg: "This image will be permanently removed.",
       onConfirm: async () => {
         await supabase.storage.from("photos").remove([`${active.id}/${photo.name}`]);
         await loadPhotos(active.id);
-        if(!notes.trim()){
-          const {data}=await supabase.storage.from("photos").list(active.id);
-          if(!data || !data.length){
-            await supabase.from("systems").update({status:"not_completed"}).eq("id",active.id);
-            loadSystems();
-          }
-        }
         notify("Photo deleted", "delete");
         setConfirmData(null);
       }
@@ -190,7 +257,7 @@ function Dashboard({ user }) {
   const handleDeleteSystem = () => {
     setConfirmData({
       title: "Delete System?",
-      msg: `Are you sure you want to delete system ${editTarget.originalId}? All associated data will be lost.`,
+      msg: `Delete system ${editTarget.originalId}? All data will be lost.`,
       onConfirm: async () => {
         await supabase.from("systems").delete().eq("id", editTarget.originalId);
         setEditTarget(null);
@@ -222,7 +289,6 @@ function Dashboard({ user }) {
   return (
     <div className="flex h-screen overflow-hidden bg-white">
       
-      {/* CREATIVE TOAST */}
       {toast && (
         <div className={`fixed top-5 right-5 z-[100] p-4 rounded-2xl shadow-2xl flex items-center gap-3 toast-in text-white font-bold
           ${toast.type === 'delete' ? 'bg-orange-500' : 'bg-green-600'}`}>
@@ -231,7 +297,6 @@ function Dashboard({ user }) {
         </div>
       )}
 
-      {/* CREATIVE CONFIRM MODAL */}
       {confirmData && (
         <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-3xl w-full max-w-xs shadow-2xl fade-in text-center">
@@ -247,28 +312,26 @@ function Dashboard({ user }) {
       )}
 
       {/* MOBILE HEADER */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b p-4 flex justify-between z-20">
-        <h1 className="font-bold text-red-600">STS QAQC</h1>
-        <button onClick={()=>setSidebarOpen(!sidebarOpen)} className="text-2xl">☰</button>
+      <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b-2 p-8 flex justify-between items-center z-20 shadow-sm">
+        <h1 className="font-black text-2xl text-red-600 tracking-tight">STS QAQC</h1>
+        <button onClick={()=>setSidebarOpen(!sidebarOpen)} className="text-3xl p-2 -mr-2">☰</button>
       </div>
 
-      {/* SIDEBAR */}
       <div className={`${sidebarOpen?'translate-x-0':'-translate-x-full'} lg:translate-x-0 fixed lg:relative z-30 w-72 h-full bg-white border-r p-6 transition-transform duration-300`}>
         <h1 className="text-2xl font-bold text-red-600 mb-2">STS QAQC</h1>
         <p className="text-xs text-gray-500 break-all mb-4">{user.email}</p>
         <button onClick={()=>setShowAdd(true)} className="bg-red-600 text-white py-3 rounded-2xl font-semibold mb-6 w-full hover:bg-red-700 shadow-md transition">+ Add System</button>
         <div className="flex flex-col gap-2 flex-1">
-          <button onClick={()=>{setFilter("all"); setSidebarOpen(false);}} className="sidebarBtn">📁 All Systems</button>
-          <button onClick={()=>{setFilter("completed"); setSidebarOpen(false);}} className="sidebarBtn">✅ Completed</button>
-          <button onClick={()=>{setFilter("not_completed"); setSidebarOpen(false);}} className="sidebarBtn">❌ Not Completed</button>
+          <button onClick={()=>{setFilter("all"); setSidebarOpen(false);}} className="sidebarBtn"><span>🏗️</span> All Systems</button>
+          <button onClick={()=>{setFilter("completed"); setSidebarOpen(false);}} className="sidebarBtn"><span>🏆</span> Completed</button>
+          <button onClick={()=>{setFilter("not_completed"); setSidebarOpen(false);}} className="sidebarBtn"><span>🚧</span> Not Completed</button>
         </div>
         <button onClick={()=>supabase.auth.signOut()} className="mt-6 w-full py-3 border text-red-600 rounded-xl font-bold hover:bg-red-50 transition">Logout</button>
       </div>
 
-      {/* MAIN */}
-      <div className="flex-1 p-6 lg:p-10 overflow-y-auto mt-14 lg:mt-0">
+      <div className="flex-1 p-6 lg:p-10 overflow-y-auto mt-40 lg:mt-0">
         <div className="relative mb-6">
-          <input className="w-full border p-4 pr-12 rounded-2xl shadow-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+          <input className="w-full border-2 p-4 pr-12 rounded-2xl shadow-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
             placeholder="Search system number or description..."
             value={search}
             onChange={e=>setSearch(e.target.value)} />
@@ -281,26 +344,43 @@ function Dashboard({ user }) {
           {filtered.map(s=>(
             <div key={s.id} className="relative group fade-in">
               <div onClick={()=>setActive(s)}
-                className={`cursor-pointer p-8 rounded-3xl border shadow-sm h-full transition-all hover:shadow-md
+                className={`system-card cursor-pointer p-8 rounded-3xl border shadow-sm h-full transition-all
                 ${s.status==="completed"?"bg-green-50 border-green-200":"bg-white border-slate-200"}`}>
                 <h3 className="font-bold text-xl">{s.id}</h3>
                 <p className="text-sm text-gray-600 mt-2">{s.description}</p>
               </div>
+              
               <button onClick={(e) => { e.stopPropagation(); setEditTarget({ ...s, originalId: s.id }); }}
-                className="absolute top-4 right-4 p-2 bg-white/90 rounded-full shadow hover:bg-red-100 text-gray-500 hover:text-red-600 transition opacity-0 group-hover:opacity-100">✏️</button>
+                className="absolute top-4 right-4 p-2 bg-white/90 border shadow-sm rounded-full text-gray-500 hover:text-red-600 hover:border-red-200 transition-all active:scale-95 lg:opacity-0 lg:group-hover:opacity-100">
+                <span>✏️</span>
+              </button>
             </div>
           ))}
         </div>
       </div>
 
-      {/* SYSTEM MODAL */}
+      {/* MOBILE QUICK ADD */}
+      <button onClick={()=>setShowAdd(true)} className="lg:hidden fixed bottom-6 right-6 w-16 h-16 bg-red-600 text-white rounded-full shadow-2xl text-3xl font-bold flex items-center justify-center z-20 active:scale-90 transition-transform">
+        +
+      </button>
+
       {active && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-40 backdrop-blur-sm">
           <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] fade-in">
-            <div className="bg-red-600 text-white p-6 rounded-t-3xl"><h2 className="text-xl font-bold">{active.id}</h2></div>
+            <div className="bg-red-600 text-white p-6 rounded-t-3xl flex justify-between items-center">
+                <h2 className="text-xl font-bold">{active.id}</h2>
+                <button onClick={generatePDF} className="bg-white text-red-600 px-4 py-1.5 rounded-xl text-xs font-black hover:bg-red-50 transition">EXPORT PDF</button>
+            </div>
             <div className="p-6 overflow-y-auto space-y-4 flex-1">
-              <textarea value={notes} onChange={e=>setNotes(e.target.value)}
-                className="w-full border p-4 rounded-2xl h-32 focus:ring-2 focus:ring-red-500 outline-none" placeholder="Inspection notes..." />
+              <div className="relative">
+                <textarea value={notes} onChange={e=>setNotes(e.target.value)}
+                    className="w-full border p-4 rounded-2xl h-32 focus:ring-2 focus:ring-red-500 outline-none" placeholder="Inspection notes..." />
+                <button onClick={startListening} 
+                    className={`absolute bottom-3 right-3 p-3 rounded-full shadow-md transition ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>
+                    {isListening ? "⏹️" : "🎤"}
+                </button>
+              </div>
+              
               <div className="border-2 border-dashed border-gray-200 p-4 rounded-2xl">
                 <p className="text-sm font-semibold mb-2">Upload Photos</p>
                 <input id="file-upload" type="file" multiple className="text-sm" />
@@ -329,7 +409,6 @@ function Dashboard({ user }) {
         </div>
       )}
 
-      {/* ADD SYSTEM MODAL */}
       {showAdd && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl fade-in">
@@ -344,12 +423,11 @@ function Dashboard({ user }) {
         </div>
       )}
 
-      {/* EDIT SYSTEM MODAL */}
       {editTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl fade-in">
-            <h2 className="text-xl font-bold mb-4 text-center text-red-600">Edit System</h2>
-            <p className="text-[10px] text-center text-gray-400 mb-2 uppercase tracking-widest">Editing ID: {editTarget.originalId}</p>
+            <h2 className="text-xl font-bold mb-4 text-center text-red-600 uppercase">Edit System</h2>
+            <p className="text-[10px] text-center text-gray-400 mb-2 uppercase tracking-widest">Editing: {editTarget.originalId}</p>
             <input className="w-full border p-4 rounded-2xl mb-3 text-center font-bold outline-none focus:ring-2 focus:ring-red-500" placeholder="System Number" value={editTarget.id} onChange={e=>setEditTarget({...editTarget, id: e.target.value})} />
             <input className="w-full border p-4 rounded-2xl mb-6 text-center outline-none focus:ring-2 focus:ring-red-500" placeholder="Description" value={editTarget.description} onChange={e=>setEditTarget({...editTarget, description: e.target.value})} />
             <div className="space-y-3">
