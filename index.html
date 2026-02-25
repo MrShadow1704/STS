@@ -124,6 +124,7 @@ function Dashboard({ user }) {
   const [toast, setToast] = useState(null);
   const [confirmData, setConfirmData] = useState(null);
   const [isListening, setIsListening] = useState(false);
+  const [hasNewChanges, setHasNewChanges] = useState(false);
 
   useEffect(()=>{ loadSystems(); },[]);
 
@@ -155,6 +156,7 @@ function Dashboard({ user }) {
     if(active){
       setNotes(active.notes||"");
       loadPhotos(active.id);
+      setHasNewChanges(false);
     }
   },[active]);
 
@@ -164,11 +166,11 @@ function Dashboard({ user }) {
     const reader = new FileReader();
     reader.onload = async (event) => {
       const text = event.target.result;
-      const rows = text.split('\n').slice(1); // skip header
+      const rows = text.split('\n').slice(1);
       const toInsert = rows.map(row => {
         const [id, description] = row.split(',');
         if (id && id.trim()) {
-           return { id: id.trim(), description: description?.trim() || "", notes: "", status: "not_completed" };
+           return { id: id.trim(), description: description?.trim() || "", notes: "", status: "not_completed", has_updates: false };
         }
         return null;
       }).filter(x => x !== null);
@@ -197,6 +199,7 @@ function Dashboard({ user }) {
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
       setNotes(prev => prev + (prev ? " " : "") + transcript);
+      if(active.status === "completed") setHasNewChanges(true);
     };
     recognition.onend = () => setIsListening(false);
     recognition.start();
@@ -280,9 +283,17 @@ function Dashboard({ user }) {
       }
     }
     const hasContent = notes.trim() || photos.length || input.files.length;
+    
+    // Logic: If status is completed and changes were made, or if it's already updated, 
+    // saving resets has_updates to false.
     await supabase.from("systems")
-      .update({ notes, status: hasContent ? "completed" : "not_completed" })
+      .update({ 
+        notes, 
+        status: hasContent ? "completed" : "not_completed",
+        has_updates: false 
+      })
       .eq("id",active.id);
+      
     notify("System saved successfully!");
     setActive(null);
     loadSystems();
@@ -295,6 +306,10 @@ function Dashboard({ user }) {
       onConfirm: async () => {
         await supabase.storage.from("photos").remove([`${active.id}/${photo.name}`]);
         await loadPhotos(active.id);
+        if(active.status === "completed") {
+           await supabase.from("systems").update({ has_updates: true }).eq("id", active.id);
+           loadSystems();
+        }
         notify("Photo deleted", "delete");
         setConfirmData(null);
       }
@@ -307,7 +322,8 @@ function Dashboard({ user }) {
       id:newId.trim(),
       description:desc,
       notes:"",
-      status:"not_completed"
+      status:"not_completed",
+      has_updates: false
     }]);
     setShowAdd(false); setNewId(""); setDesc(""); loadSystems();
     notify("New system added!");
@@ -434,6 +450,13 @@ function Dashboard({ user }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filtered.map(s=>(
             <div key={s.id} className="relative group fade-in">
+              {/* Pulse Notification Badge */}
+              {s.status === "completed" && s.has_updates && (
+                <div className="absolute -top-2 -left-2 z-20 w-7 h-7 bg-red-600 text-white rounded-full flex items-center justify-center text-sm font-black shadow-lg animate-pulse ring-4 ring-white">
+                  !
+                </div>
+              )}
+              
               <div onClick={()=>setActive(s)}
                 className={`system-card cursor-pointer p-8 rounded-3xl border shadow-sm h-full transition-all
                 ${s.status==="completed"?"bg-green-50 border-green-200":"bg-white border-slate-200"}`}>
@@ -467,7 +490,14 @@ function Dashboard({ user }) {
             </div>
             <div className="p-6 overflow-y-auto space-y-4 flex-1">
               <div className="relative">
-                <textarea value={notes} onChange={e=>setNotes(e.target.value)}
+                <textarea 
+                    value={notes} 
+                    onChange={e=>{
+                      setNotes(e.target.value);
+                      if(active.status === "completed" && e.target.value !== active.notes) {
+                        supabase.from("systems").update({ has_updates: true }).eq("id", active.id).then(() => loadSystems());
+                      }
+                    }}
                     className="w-full border p-4 rounded-2xl h-32 focus:ring-2 focus:ring-red-500 outline-none" placeholder="Inspection notes..." />
                 <button onClick={startListening} 
                     className={`absolute bottom-3 right-3 p-3 rounded-full shadow-md transition ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>
@@ -476,7 +506,13 @@ function Dashboard({ user }) {
               </div>
               <div className="border-2 border-dashed border-gray-200 p-4 rounded-2xl">
                 <p className="text-sm font-semibold mb-2">Upload Photos</p>
-                <input id="file-upload" type="file" multiple className="text-sm" />
+                <input id="file-upload" type="file" multiple className="text-sm" 
+                  onChange={() => {
+                    if(active.status === "completed") {
+                      supabase.from("systems").update({ has_updates: true }).eq("id", active.id).then(() => loadSystems());
+                    }
+                  }}
+                />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {photos.map(p=>(
