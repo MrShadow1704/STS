@@ -37,7 +37,6 @@ body { font-family: Inter, sans-serif; background:#fff; overflow-x:hidden; }
   to { transform: translateX(0); opacity: 1; }
 }
 
-/* Fix for Mobile Sticky Header and Search */
 @media (max-width: 1023px) {
   .mobile-header-group {
     position: fixed;
@@ -48,7 +47,7 @@ body { font-family: Inter, sans-serif; background:#fff; overflow-x:hidden; }
     background: white;
   }
   .content-spacer {
-    margin-top: 180px; /* Space for Logo + Search Bar */
+    margin-top: 180px; 
   }
 }
 </style>
@@ -159,6 +158,33 @@ function Dashboard({ user }) {
     }
   },[active]);
 
+  const handleBulkImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target.result;
+      const rows = text.split('\n').slice(1); // skip header
+      const toInsert = rows.map(row => {
+        const [id, description] = row.split(',');
+        if (id && id.trim()) {
+           return { id: id.trim(), description: description?.trim() || "", notes: "", status: "not_completed" };
+        }
+        return null;
+      }).filter(x => x !== null);
+
+      if (toInsert.length > 0) {
+        const { error } = await supabase.from("systems").insert(toInsert);
+        if (error) notify("Import failed: " + error.message, "delete");
+        else {
+          notify(`${toInsert.length} systems imported!`);
+          loadSystems();
+        }
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const startListening = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -177,6 +203,7 @@ function Dashboard({ user }) {
   };
 
   const generatePDF = async () => {
+    if (active.status !== "completed") return;
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     let yPos = 20;
@@ -375,7 +402,16 @@ function Dashboard({ user }) {
       <div className={`${sidebarOpen?'translate-x-0':'-translate-x-full'} lg:translate-x-0 fixed lg:relative z-50 w-72 h-full bg-white border-r p-6 transition-transform duration-300`}>
         <h1 className="text-2xl font-bold text-red-600 mb-2">STS QAQC</h1>
         <p className="text-xs text-gray-500 break-all mb-4">{user.email}</p>
-        <button onClick={()=>setShowAdd(true)} className="bg-red-600 text-white py-3 rounded-2xl font-semibold mb-6 w-full hover:bg-red-700 shadow-md transition">+ Add System</button>
+        
+        <div className="space-y-3 mb-6">
+          <button onClick={()=>setShowAdd(true)} className="bg-red-600 text-white py-3 rounded-2xl font-semibold w-full hover:bg-red-700 shadow-md transition">+ Add System</button>
+          
+          <label className="hidden lg:flex items-center justify-center bg-gray-100 text-gray-700 py-3 rounded-2xl font-semibold w-full cursor-pointer hover:bg-gray-200 transition">
+             📁 Bulk Import (CSV)
+             <input type="file" accept=".csv" className="hidden" onChange={handleBulkImport} />
+          </label>
+        </div>
+
         <div className="flex flex-col gap-2 flex-1">
           <button onClick={()=>{setFilter("all"); setSidebarOpen(false);}} className="sidebarBtn"><span>🏗️</span> All Systems</button>
           <button onClick={()=>{setFilter("completed"); setSidebarOpen(false);}} className="sidebarBtn"><span>🏆</span> Completed</button>
@@ -422,7 +458,12 @@ function Dashboard({ user }) {
           <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] fade-in">
             <div className="bg-red-600 text-white p-6 rounded-t-3xl flex justify-between items-center">
                 <h2 className="text-xl font-bold">{active.id}</h2>
-                <button onClick={generatePDF} className="bg-white text-red-600 px-4 py-1.5 rounded-xl text-xs font-black hover:bg-red-50 transition">EXPORT PDF</button>
+                <button 
+                  disabled={active.status !== "completed"}
+                  onClick={generatePDF} 
+                  className={`px-4 py-1.5 rounded-xl text-xs font-black transition ${active.status === "completed" ? "bg-white text-red-600 hover:bg-red-50" : "bg-gray-300 text-gray-500 cursor-not-allowed opacity-70"}`}>
+                  EXPORT PDF
+                </button>
             </div>
             <div className="p-6 overflow-y-auto space-y-4 flex-1">
               <div className="relative">
