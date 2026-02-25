@@ -31,21 +31,24 @@ body { font-family: Inter, sans-serif; background:#fff; overflow-x:hidden; }
   }
 }
 
-/* Hands Covering Eyes Animation */
-.worker-wrapper { position: relative; width: 40px; height: 40px; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.worker-emoji { font-size: 24px; transition: all 0.3s; }
-.worker-hands { 
-    position: absolute; 
-    font-size: 20px; 
-    bottom: -20px; 
-    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
-}
-.worker-hands.covering { bottom: 6px; }
-
 .toast-in { animation: slideIn 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); }
 @keyframes slideIn {
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
+}
+
+@media (max-width: 1023px) {
+  .mobile-header-group {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    background: white;
+  }
+  .content-spacer {
+    margin-top: 180px; 
+  }
 }
 </style>
 </head>
@@ -89,9 +92,8 @@ function Auth({ onAuth }) {
         <input className="w-full border p-3 rounded-xl mt-4 focus:ring-2 focus:ring-red-500 outline-none" placeholder="Email" onChange={e=>setEmail(e.target.value)} />
         <div className="relative mt-2">
           <input type={showPass ? "text" : "password"} className="w-full border p-3 rounded-xl focus:ring-2 focus:ring-red-500 outline-none" placeholder="Password" onChange={e=>setPass(e.target.value)} />
-          <button type="button" onClick={()=>setShowPass(!showPass)} className="absolute right-2 top-1/2 -translate-y-1/2 worker-wrapper">
-             <span className="worker-emoji">👷</span>
-             <span className={`worker-hands ${!showPass ? 'covering' : ''}`}>👐</span>
+          <button type="button" onClick={()=>setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-xl opacity-50 hover:opacity-100 transition-opacity">
+              {showPass ? "👁️" : "🙈"}
           </button>
         </div>
         {msg && <p className="text-sm text-center mt-2 text-red-600 font-bold">{msg}</p>}
@@ -156,7 +158,33 @@ function Dashboard({ user }) {
     }
   },[active]);
 
-  /* VOICE TO TEXT LOGIC */
+  const handleBulkImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target.result;
+      const rows = text.split('\n').slice(1); // skip header
+      const toInsert = rows.map(row => {
+        const [id, description] = row.split(',');
+        if (id && id.trim()) {
+           return { id: id.trim(), description: description?.trim() || "", notes: "", status: "not_completed" };
+        }
+        return null;
+      }).filter(x => x !== null);
+
+      if (toInsert.length > 0) {
+        const { error } = await supabase.from("systems").insert(toInsert);
+        if (error) notify("Import failed: " + error.message, "delete");
+        else {
+          notify(`${toInsert.length} systems imported!`);
+          loadSystems();
+        }
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const startListening = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -174,30 +202,71 @@ function Dashboard({ user }) {
     recognition.start();
   };
 
-  /* PDF GENERATOR LOGIC */
-  const generatePDF = () => {
+  const generatePDF = async () => {
+    if (active.status !== "completed") return;
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
-    
-    doc.setFontSize(22);
-    doc.setTextColor(220, 38, 38);
-    doc.text("STS QAQC INSPECTION REPORT", 20, 20);
-    
-    doc.setFontSize(12);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`System ID: ${active.id}`, 20, 35);
-    doc.text(`Description: ${active.description}`, 20, 42);
-    doc.text(`Inspector: ${user.email}`, 20, 49);
-    doc.text(`Date: ${new Date().toLocaleString()}`, 20, 56);
-    
-    doc.line(20, 62, 190, 62);
-    
-    doc.setFontSize(14);
-    doc.text("Inspection Notes:", 20, 72);
-    doc.setFontSize(11);
-    const splitNotes = doc.splitTextToSize(notes || "No notes provided.", 170);
-    doc.text(splitNotes, 20, 80);
+    let yPos = 20;
 
+    doc.setFillColor(220, 38, 38);
+    doc.rect(0, 0, 210, 40, 'F');
+    doc.setFontSize(24);
+    doc.setTextColor(255, 255, 255);
+    doc.text("STS QAQC REPORT", 20, 28);
+    yPos = 55;
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.text(`SYSTEM ID:`, 20, yPos);
+    doc.setFont(undefined, 'bold');
+    doc.text(`${active.id}`, 50, yPos);
+    yPos += 7;
+    doc.setFont(undefined, 'normal');
+    doc.text(`INSPECTOR:`, 20, yPos);
+    doc.text(`${user.email}`, 50, yPos);
+    yPos += 7;
+    doc.text(`DATE:`, 20, yPos);
+    doc.text(`${new Date().toLocaleString()}`, 50, yPos);
+    yPos += 15;
+    doc.setDrawColor(220, 38, 38);
+    doc.setLineWidth(1);
+    doc.line(20, yPos, 190, yPos);
+    yPos += 12;
+    doc.setFontSize(14);
+    doc.setTextColor(220, 38, 38);
+    doc.text("INSPECTION NOTES", 20, yPos);
+    yPos += 8;
+    doc.setFontSize(11);
+    doc.setTextColor(40, 40, 40);
+    doc.setFont(undefined, 'normal');
+    const splitNotes = doc.splitTextToSize(notes || "No notes provided.", 170);
+    doc.text(splitNotes, 20, yPos);
+    yPos += (splitNotes.length * 7) + 10;
+
+    if (photos.length > 0) {
+      doc.setFontSize(14);
+      doc.setTextColor(220, 38, 38);
+      doc.text("ATTACHED PHOTOS", 20, yPos);
+      yPos += 10;
+      for (const [index, photo] of photos.entries()) {
+        if (yPos > 240) {
+          doc.addPage();
+          yPos = 20;
+        }
+        try {
+          const img = new Image();
+          img.src = photo.url;
+          await new Promise((resolve) => { img.onload = resolve; });
+          const xPos = (index % 2 === 0) ? 20 : 110;
+          doc.addImage(img, 'JPEG', xPos, yPos, 80, 60);
+          doc.setFontSize(8);
+          doc.text(`Uploaded by: ${photo.uploader}`, xPos, yPos + 65);
+          if (index % 2 !== 0) yPos += 80; 
+          else if (index === photos.length - 1) yPos += 80;
+        } catch (e) {
+          console.error("Image failed to load for PDF", e);
+        }
+      }
+    }
     doc.save(`STS_Report_${active.id}.pdf`);
     notify("PDF Generated!");
   };
@@ -311,16 +380,38 @@ function Dashboard({ user }) {
         </div>
       )}
 
-      {/* MOBILE HEADER */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b-2 p-8 flex justify-between items-center z-20 shadow-sm">
-        <h1 className="font-black text-2xl text-red-600 tracking-tight">STS QAQC</h1>
-        <button onClick={()=>setSidebarOpen(!sidebarOpen)} className="text-3xl p-2 -mr-2">☰</button>
+      {/* MOBILE HEADER WRAPPER (LOGO + SEARCH) */}
+      <div className="mobile-header-group">
+        <div className="lg:hidden flex justify-between items-center p-6 border-b-2">
+          <h1 className="font-black text-2xl text-red-600 tracking-tight">STS QAQC</h1>
+          <button onClick={()=>setSidebarOpen(!sidebarOpen)} className="text-3xl p-2 -mr-2">☰</button>
+        </div>
+        <div className="lg:hidden px-6 py-4 bg-white border-b">
+           <div className="relative">
+            <input className="w-full border-2 p-3 pr-10 rounded-2xl shadow-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+              placeholder="Search system..."
+              value={search}
+              onChange={e=>setSearch(e.target.value)} />
+            {search && (
+              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 text-xs">✕</button>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className={`${sidebarOpen?'translate-x-0':'-translate-x-full'} lg:translate-x-0 fixed lg:relative z-30 w-72 h-full bg-white border-r p-6 transition-transform duration-300`}>
+      <div className={`${sidebarOpen?'translate-x-0':'-translate-x-full'} lg:translate-x-0 fixed lg:relative z-50 w-72 h-full bg-white border-r p-6 transition-transform duration-300`}>
         <h1 className="text-2xl font-bold text-red-600 mb-2">STS QAQC</h1>
         <p className="text-xs text-gray-500 break-all mb-4">{user.email}</p>
-        <button onClick={()=>setShowAdd(true)} className="bg-red-600 text-white py-3 rounded-2xl font-semibold mb-6 w-full hover:bg-red-700 shadow-md transition">+ Add System</button>
+        
+        <div className="space-y-3 mb-6">
+          <button onClick={()=>setShowAdd(true)} className="bg-red-600 text-white py-3 rounded-2xl font-semibold w-full hover:bg-red-700 shadow-md transition">+ Add System</button>
+          
+          <label className="hidden lg:flex items-center justify-center bg-gray-100 text-gray-700 py-3 rounded-2xl font-semibold w-full cursor-pointer hover:bg-gray-200 transition">
+             📁 Bulk Import (CSV)
+             <input type="file" accept=".csv" className="hidden" onChange={handleBulkImport} />
+          </label>
+        </div>
+
         <div className="flex flex-col gap-2 flex-1">
           <button onClick={()=>{setFilter("all"); setSidebarOpen(false);}} className="sidebarBtn"><span>🏗️</span> All Systems</button>
           <button onClick={()=>{setFilter("completed"); setSidebarOpen(false);}} className="sidebarBtn"><span>🏆</span> Completed</button>
@@ -329,8 +420,8 @@ function Dashboard({ user }) {
         <button onClick={()=>supabase.auth.signOut()} className="mt-6 w-full py-3 border text-red-600 rounded-xl font-bold hover:bg-red-50 transition">Logout</button>
       </div>
 
-      <div className="flex-1 p-6 lg:p-10 overflow-y-auto mt-40 lg:mt-0">
-        <div className="relative mb-6">
+      <div className="flex-1 p-6 lg:p-10 overflow-y-auto content-spacer lg:mt-0">
+        <div className="hidden lg:block relative mb-6">
           <input className="w-full border-2 p-4 pr-12 rounded-2xl shadow-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
             placeholder="Search system number or description..."
             value={search}
@@ -349,7 +440,6 @@ function Dashboard({ user }) {
                 <h3 className="font-bold text-xl">{s.id}</h3>
                 <p className="text-sm text-gray-600 mt-2">{s.description}</p>
               </div>
-              
               <button onClick={(e) => { e.stopPropagation(); setEditTarget({ ...s, originalId: s.id }); }}
                 className="absolute top-4 right-4 p-2 bg-white/90 border shadow-sm rounded-full text-gray-500 hover:text-red-600 hover:border-red-200 transition-all active:scale-95 lg:opacity-0 lg:group-hover:opacity-100">
                 <span>✏️</span>
@@ -359,17 +449,21 @@ function Dashboard({ user }) {
         </div>
       </div>
 
-      {/* MOBILE QUICK ADD */}
-      <button onClick={()=>setShowAdd(true)} className="lg:hidden fixed bottom-6 right-6 w-16 h-16 bg-red-600 text-white rounded-full shadow-2xl text-3xl font-bold flex items-center justify-center z-20 active:scale-90 transition-transform">
+      <button onClick={()=>setShowAdd(true)} className="lg:hidden fixed bottom-6 right-6 w-16 h-16 bg-red-600 text-white rounded-full shadow-2xl text-3xl font-bold flex items-center justify-center z-30 active:scale-90 transition-transform">
         +
       </button>
 
       {active && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-40 backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[60] backdrop-blur-sm">
           <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] fade-in">
             <div className="bg-red-600 text-white p-6 rounded-t-3xl flex justify-between items-center">
                 <h2 className="text-xl font-bold">{active.id}</h2>
-                <button onClick={generatePDF} className="bg-white text-red-600 px-4 py-1.5 rounded-xl text-xs font-black hover:bg-red-50 transition">EXPORT PDF</button>
+                <button 
+                  disabled={active.status !== "completed"}
+                  onClick={generatePDF} 
+                  className={`px-4 py-1.5 rounded-xl text-xs font-black transition ${active.status === "completed" ? "bg-white text-red-600 hover:bg-red-50" : "bg-gray-300 text-gray-500 cursor-not-allowed opacity-70"}`}>
+                  EXPORT PDF
+                </button>
             </div>
             <div className="p-6 overflow-y-auto space-y-4 flex-1">
               <div className="relative">
@@ -380,7 +474,6 @@ function Dashboard({ user }) {
                     {isListening ? "⏹️" : "🎤"}
                 </button>
               </div>
-              
               <div className="border-2 border-dashed border-gray-200 p-4 rounded-2xl">
                 <p className="text-sm font-semibold mb-2">Upload Photos</p>
                 <input id="file-upload" type="file" multiple className="text-sm" />
@@ -410,7 +503,7 @@ function Dashboard({ user }) {
       )}
 
       {showAdd && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl fade-in">
             <h2 className="text-xl font-bold mb-4 text-center">New System</h2>
             <input className="w-full border p-4 rounded-2xl mb-3 text-center font-bold outline-none focus:ring-2 focus:ring-red-500" placeholder="System Number" value={newId} onChange={e=>setNewId(e.target.value)} />
@@ -424,7 +517,7 @@ function Dashboard({ user }) {
       )}
 
       {editTarget && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
           <div className="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl fade-in">
             <h2 className="text-xl font-bold mb-4 text-center text-red-600 uppercase">Edit System</h2>
             <p className="text-[10px] text-center text-gray-400 mb-2 uppercase tracking-widest">Editing: {editTarget.originalId}</p>
