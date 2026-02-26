@@ -73,8 +73,18 @@ function Auth({ onAuth }) {
 
   async function submit(){
     try {
+      setMsg("");
       if(mode==="signup"){
-        await supabase.auth.signUp({email,password:pass});
+        const {data, error} = await supabase.auth.signUp({email,password:pass});
+        if(error) throw error;
+        
+        // Supabase returns an empty identities array if the email is already taken
+        // and "Confirm Email" is enabled in your settings.
+        if (data?.user?.identities?.length === 0) {
+          setMsg("User already exists with this email.");
+          return;
+        }
+
         setMsg("Account created. Login now.");
         setMode("login");
       } else {
@@ -82,7 +92,13 @@ function Auth({ onAuth }) {
         if(error) throw error;
         onAuth(data.user);
       }
-    } catch(e) { setMsg(e.message); }
+    } catch(e) { 
+      if (e.message.includes("already registered")) {
+        setMsg("User already exists.");
+      } else {
+        setMsg(e.message); 
+      }
+    }
   }
 
   return (
@@ -407,8 +423,8 @@ function Dashboard({ user }) {
           <button onClick={()=>setShowAdd(true)} className="bg-red-600 text-white py-3 rounded-2xl font-semibold w-full hover:bg-red-700 shadow-md transition">+ Add System</button>
           
           <label className="hidden lg:flex items-center justify-center bg-gray-100 text-gray-700 py-3 rounded-2xl font-semibold w-full cursor-pointer hover:bg-gray-200 transition">
-             📁 Bulk Import (CSV)
-             <input type="file" accept=".csv" className="hidden" onChange={handleBulkImport} />
+              📁 Bulk Import (CSV)
+              <input type="file" accept=".csv" className="hidden" onChange={handleBulkImport} />
           </label>
         </div>
 
