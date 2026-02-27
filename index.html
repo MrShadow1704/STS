@@ -78,8 +78,6 @@ function Auth({ onAuth }) {
         const {data, error} = await supabase.auth.signUp({email,password:pass});
         if(error) throw error;
         
-        // Supabase returns an empty identities array if the email is already taken
-        // and "Confirm Email" is enabled in your settings.
         if (data?.user?.identities?.length === 0) {
           setMsg("User already exists with this email.");
           return;
@@ -180,7 +178,7 @@ function Dashboard({ user }) {
     const reader = new FileReader();
     reader.onload = async (event) => {
       const text = event.target.result;
-      const rows = text.split('\n').slice(1); // skip header
+      const rows = text.split('\n').slice(1);
       const toInsert = rows.map(row => {
         const [id, description] = row.split(',');
         if (id && id.trim()) {
@@ -340,6 +338,10 @@ function Dashboard({ user }) {
   }
 
   const handleDeleteSystem = () => {
+    if (editTarget.status === "completed") {
+      notify("Cannot delete completed system!", "delete");
+      return;
+    }
     setConfirmData({
       title: "Delete System?",
       msg: `Delete system ${editTarget.originalId}? All data will be lost.`,
@@ -377,7 +379,7 @@ function Dashboard({ user }) {
       {toast && (
         <div className={`fixed top-5 right-5 z-[100] p-4 rounded-2xl shadow-2xl flex items-center gap-3 toast-in text-white font-bold
           ${toast.type === 'delete' ? 'bg-orange-500' : 'bg-green-600'}`}>
-          <span>{toast.type === 'delete' ? '🗑️' : '🚀'}</span>
+          <span>{toast.type === 'delete' ? '⚠️' : '🚀'}</span>
           {toast.msg}
         </div>
       )}
