@@ -73,8 +73,16 @@ function Auth({ onAuth }) {
 
   async function submit(){
     try {
+      setMsg("");
       if(mode==="signup"){
-        await supabase.auth.signUp({email,password:pass});
+        const {data, error} = await supabase.auth.signUp({email,password:pass});
+        if(error) throw error;
+        
+        if (data?.user?.identities?.length === 0) {
+          setMsg("User already exists with this email.");
+          return;
+        }
+
         setMsg("Account created. Login now.");
         setMode("login");
       } else {
@@ -82,7 +90,13 @@ function Auth({ onAuth }) {
         if(error) throw error;
         onAuth(data.user);
       }
-    } catch(e) { setMsg(e.message); }
+    } catch(e) { 
+      if (e.message.includes("already registered")) {
+        setMsg("User already exists.");
+      } else {
+        setMsg(e.message); 
+      }
+    }
   }
 
   return (
@@ -164,7 +178,7 @@ function Dashboard({ user }) {
     const reader = new FileReader();
     reader.onload = async (event) => {
       const text = event.target.result;
-      const rows = text.split('\n').slice(1); // skip header
+      const rows = text.split('\n').slice(1);
       const toInsert = rows.map(row => {
         const [id, description] = row.split(',');
         if (id && id.trim()) {
@@ -303,6 +317,14 @@ function Dashboard({ user }) {
 
   async function createSystem(){
     if(!newId.trim()) return;
+    
+    // Check if ID exists
+    const { data: existing } = await supabase.from("systems").select("id").eq("id", newId.trim()).maybeSingle();
+    if (existing) {
+        notify("System ID already exists!", "delete");
+        return;
+    }
+
     await supabase.from("systems").insert([{
       id:newId.trim(),
       description:desc,
@@ -315,15 +337,35 @@ function Dashboard({ user }) {
 
   async function updateSystem() {
     if(!editTarget.id.trim()) return;
+
+    // If ID changed, move photos in storage
+    if (editTarget.id !== editTarget.originalId) {
+        const { data: files } = await supabase.storage.from("photos").list(editTarget.originalId);
+        if (files && files.length > 0) {
+            for (const file of files) {
+                await supabase.storage.from("photos").copy(
+                    `${editTarget.originalId}/${file.name}`,
+                    `${editTarget.id}/${file.name}`
+                );
+                await supabase.storage.from("photos").remove([`${editTarget.originalId}/${file.name}`]);
+            }
+        }
+    }
+
     await supabase.from("systems")
       .update({ id: editTarget.id, description: editTarget.description })
       .eq("id", editTarget.originalId);
+    
     setEditTarget(null);
     loadSystems();
     notify("System updated!");
   }
 
   const handleDeleteSystem = () => {
+    if (editTarget.status === "completed") {
+      notify("Cannot delete completed system!", "delete");
+      return;
+    }
     setConfirmData({
       title: "Delete System?",
       msg: `Delete system ${editTarget.originalId}? All data will be lost.`,
@@ -361,7 +403,7 @@ function Dashboard({ user }) {
       {toast && (
         <div className={`fixed top-5 right-5 z-[100] p-4 rounded-2xl shadow-2xl flex items-center gap-3 toast-in text-white font-bold
           ${toast.type === 'delete' ? 'bg-orange-500' : 'bg-green-600'}`}>
-          <span>{toast.type === 'delete' ? '🗑️' : '🚀'}</span>
+          <span>{toast.type === 'delete' ? '⚠️' : '🚀'}</span>
           {toast.msg}
         </div>
       )}
@@ -407,8 +449,8 @@ function Dashboard({ user }) {
           <button onClick={()=>setShowAdd(true)} className="bg-red-600 text-white py-3 rounded-2xl font-semibold w-full hover:bg-red-700 shadow-md transition">+ Add System</button>
           
           <label className="hidden lg:flex items-center justify-center bg-gray-100 text-gray-700 py-3 rounded-2xl font-semibold w-full cursor-pointer hover:bg-gray-200 transition">
-             📁 Bulk Import (CSV)
-             <input type="file" accept=".csv" className="hidden" onChange={handleBulkImport} />
+              📁 Bulk Import (CSV)
+              <input type="file" accept=".csv" className="hidden" onChange={handleBulkImport} />
           </label>
         </div>
 
