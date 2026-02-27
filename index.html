@@ -317,6 +317,14 @@ function Dashboard({ user }) {
 
   async function createSystem(){
     if(!newId.trim()) return;
+    
+    // Check if ID exists
+    const { data: existing } = await supabase.from("systems").select("id").eq("id", newId.trim()).maybeSingle();
+    if (existing) {
+        notify("System ID already exists!", "delete");
+        return;
+    }
+
     await supabase.from("systems").insert([{
       id:newId.trim(),
       description:desc,
@@ -329,9 +337,25 @@ function Dashboard({ user }) {
 
   async function updateSystem() {
     if(!editTarget.id.trim()) return;
+
+    // If ID changed, move photos in storage
+    if (editTarget.id !== editTarget.originalId) {
+        const { data: files } = await supabase.storage.from("photos").list(editTarget.originalId);
+        if (files && files.length > 0) {
+            for (const file of files) {
+                await supabase.storage.from("photos").copy(
+                    `${editTarget.originalId}/${file.name}`,
+                    `${editTarget.id}/${file.name}`
+                );
+                await supabase.storage.from("photos").remove([`${editTarget.originalId}/${file.name}`]);
+            }
+        }
+    }
+
     await supabase.from("systems")
       .update({ id: editTarget.id, description: editTarget.description })
       .eq("id", editTarget.originalId);
+    
     setEditTarget(null);
     loadSystems();
     notify("System updated!");
