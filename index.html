@@ -138,8 +138,12 @@ function Dashboard({ user }) {
   const [toast, setToast] = useState(null);
   const [confirmData, setConfirmData] = useState(null);
   const [isListening, setIsListening] = useState(false);
+  const [recentActivity, setRecentActivity] = useState([]);
 
-  useEffect(()=>{ loadSystems(); },[]);
+  useEffect(()=>{ 
+    loadSystems(); 
+    loadActivity();
+  },[]);
 
   const notify = (msg, type = "success") => {
     setToast({ msg, type });
@@ -149,6 +153,16 @@ function Dashboard({ user }) {
   async function loadSystems(){
     const {data}=await supabase.from("systems").select("*").order("id");
     setSystems(data||[]);
+  }
+
+  async function loadActivity() {
+    const {data} = await supabase.from("activity_logs").select("*").order("timestamp", {ascending: false}).limit(5);
+    setRecentActivity(data || []);
+  }
+
+  async function logActivity(sysId) {
+    await supabase.from("activity_logs").insert([{ system_id: sysId, user_email: user.email }]);
+    loadActivity();
   }
 
   async function loadPhotos(id){
@@ -297,6 +311,8 @@ function Dashboard({ user }) {
     await supabase.from("systems")
       .update({ notes, status: hasContent ? "completed" : "not_completed" })
       .eq("id",active.id);
+    
+    await logActivity(active.id);
     notify("System saved successfully!");
     setActive(null);
     loadSystems();
@@ -317,6 +333,14 @@ function Dashboard({ user }) {
 
   async function createSystem(){
     if(!newId.trim()) return;
+    
+    // Check if ID exists
+    const { data: existing } = await supabase.from("systems").select("id").eq("id", newId.trim()).maybeSingle();
+    if (existing) {
+        notify("System ID already exists!", "delete");
+        return;
+    }
+
     await supabase.from("systems").insert([{
       id:newId.trim(),
       description:desc,
@@ -329,9 +353,26 @@ function Dashboard({ user }) {
 
   async function updateSystem() {
     if(!editTarget.id.trim()) return;
+
+    // If ID changed, move photos in storage
+    if (editTarget.id !== editTarget.originalId) {
+        const { data: files } = await supabase.storage.from("photos").list(editTarget.originalId);
+        if (files && files.length > 0) {
+            for (const file of files) {
+                await supabase.storage.from("photos").copy(
+                    `${editTarget.originalId}/${file.name}`,
+                    `${editTarget.id}/${file.name}`
+                );
+                await supabase.storage.from("photos").remove([`${editTarget.originalId}/${file.name}`]);
+            }
+        }
+    }
+
     await supabase.from("systems")
       .update({ id: editTarget.id, description: editTarget.description })
       .eq("id", editTarget.originalId);
+    
+    await logActivity(editTarget.id);
     setEditTarget(null);
     loadSystems();
     notify("System updated!");
@@ -417,7 +458,7 @@ function Dashboard({ user }) {
         </div>
       </div>
 
-      <div className={`${sidebarOpen?'translate-x-0':'-translate-x-full'} lg:translate-x-0 fixed lg:relative z-50 w-72 h-full bg-white border-r p-6 transition-transform duration-300`}>
+      <div className={`${sidebarOpen?'translate-x-0':'-translate-x-full'} lg:translate-x-0 fixed lg:relative z-50 w-72 h-full bg-white border-r p-6 transition-transform duration-300 flex flex-col`}>
         <h1 className="text-2xl font-bold text-red-600 mb-2">STS QAQC</h1>
         <p className="text-xs text-gray-500 break-all mb-4">{user.email}</p>
         
@@ -430,11 +471,26 @@ function Dashboard({ user }) {
           </label>
         </div>
 
-        <div className="flex flex-col gap-2 flex-1">
+        <div className="flex flex-col gap-2 mb-6">
           <button onClick={()=>{setFilter("all"); setSidebarOpen(false);}} className="sidebarBtn"><span>🏗️</span> All Systems</button>
           <button onClick={()=>{setFilter("completed"); setSidebarOpen(false);}} className="sidebarBtn"><span>🏆</span> Completed</button>
           <button onClick={()=>{setFilter("not_completed"); setSidebarOpen(false);}} className="sidebarBtn"><span>🚧</span> Not Completed</button>
         </div>
+
+        {/* RECENT ACTIVITY SECTION */}
+        <div className="mt-4 flex-1 overflow-y-auto">
+          <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Recent Activity</h2>
+          <div className="space-y-3">
+            {recentActivity.map(act => (
+              <div key={act.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <p className="text-xs font-bold text-red-600">Updated: {act.system_id}</p>
+                <p className="text-[10px] text-gray-500 truncate">{act.user_email}</p>
+              </div>
+            ))}
+            {recentActivity.length === 0 && <p className="text-xs text-gray-400 italic">No recent updates</p>}
+          </div>
+        </div>
+
         <button onClick={()=>supabase.auth.signOut()} className="mt-6 w-full py-3 border text-red-600 rounded-xl font-bold hover:bg-red-50 transition">Logout</button>
       </div>
 
