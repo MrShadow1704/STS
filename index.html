@@ -140,16 +140,32 @@ function Dashboard({ user }) {
   const [isListening, setIsListening] = useState(false);
   const [recentUpdates, setRecentUpdates] = useState([]);
 
-  useEffect(()=>{ loadSystems(); },[]);
+  useEffect(()=>{ 
+    loadSystems(); 
+    loadRecentActivity();
+  },[]);
 
-  // Real-time listener for the Sidebar notification
+  // 1. Initial Load of Activity from DB
+  async function loadRecentActivity() {
+    // We order by updated_at if it exists, otherwise fallback to id or similar
+    const { data } = await supabase
+      .from("systems")
+      .select("*")
+      .order("updated_at", { ascending: false })
+      .limit(5);
+    
+    if (data) setRecentUpdates(data);
+  }
+
+  // 2. Real-time Subscription to keep it live
   useEffect(() => {
     const channel = supabase
-      .channel('table-db-changes')
+      .channel('sidebar-sync')
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'systems' },
         (payload) => {
+          // Update the recent list immediately
           setRecentUpdates(prev => {
             const newList = [payload.new, ...prev.filter(x => x.id !== payload.new.id)];
             return newList.slice(0, 5);
@@ -472,17 +488,20 @@ function Dashboard({ user }) {
           <button onClick={()=>{setFilter("not_completed"); setSidebarOpen(false);}} className="sidebarBtn"><span>🚧</span> Not Completed</button>
         </div>
 
-        {/* RECENT UPDATES SECTION */}
+        {/* PERSISTENT RECENT UPDATES SECTION */}
         <div className="flex-1 overflow-y-auto mt-2 border-t pt-4">
-            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Recent Activity</h4>
+            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Global Activity</h4>
             <div className="space-y-2">
                 {recentUpdates.length === 0 ? (
-                    <p className="text-xs text-gray-400 italic">No recent changes...</p>
+                    <p className="text-xs text-gray-400 italic">No activity found.</p>
                 ) : (
                     recentUpdates.map(update => (
                         <div key={update.id} className="p-3 bg-red-50 rounded-xl border border-red-100 fade-in cursor-pointer hover:bg-red-100 transition-colors" onClick={() => setActive(update)}>
-                            <p className="text-xs font-bold text-red-700">{update.id}</p>
-                            <p className="text-[10px] text-gray-500 truncate">{update.description || 'Updated system'}</p>
+                            <div className="flex justify-between items-start">
+                                <p className="text-xs font-bold text-red-700">{update.id}</p>
+                                <span className="text-[8px] bg-red-100 text-red-600 px-1 rounded uppercase font-bold">Updated</span>
+                            </div>
+                            <p className="text-[10px] text-gray-500 truncate">{update.description || 'No description'}</p>
                         </div>
                     ))
                 )}
