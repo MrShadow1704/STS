@@ -114,9 +114,8 @@ function Auth({ onAuth }) {
         <button onClick={submit} className="w-full bg-red-600 text-white p-3 rounded-xl mt-4 font-bold hover:bg-red-700 transition">
           {mode==="login"?"Login":"Create Account"}
         </button>
-        
-        {/* CREATE ACCOUNT REMOVED FROM UI BUT LOGIC KEPT */}
-        {/* <button onClick={()=>setMode(mode==="login"?"signup":"login")} className="w-full text-sm text-red-600 mt-2 font-medium">
+        {/*
+        <button onClick={()=>setMode(mode==="login"?"signup":"login")} className="w-full text-sm text-red-600 mt-2 font-medium">
           {mode==="login"?"Create Account":"Back to Login"}
         </button>
         */}
@@ -131,8 +130,8 @@ function Dashboard({ user }) {
   const [active,setActive]=useState(null);
   const [editTarget,setEditTarget]=useState(null);
   const [notes,setNotes]=useState("");
-  const [photoComments, setPhotoComments] = useState({}); // Stores comments indexed by photo name
   const [photos,setPhotos]=useState([]);
+  const [photoComments, setPhotoComments] = useState({});
   const [search,setSearch]=useState("");
   const [filter,setFilter]=useState("all");
   const [showAdd,setShowAdd]=useState(false);
@@ -186,9 +185,7 @@ function Dashboard({ user }) {
   useEffect(()=>{
     if(active){
       setNotes(active.notes||"");
-      // If active.photo_comments exists in DB, you could load it here. 
-      // For now, we initialize an empty object for the current session.
-      setPhotoComments(active.photo_comments || {}); 
+      setPhotoComments(active.photo_comments || {});
       loadPhotos(active.id);
     }
   },[active]);
@@ -203,7 +200,7 @@ function Dashboard({ user }) {
       const toInsert = rows.map(row => {
         const [id, description] = row.split(',');
         if (id && id.trim()) {
-           return { id: id.trim(), description: description?.trim() || "", notes: "", status: "not_completed" };
+           return { id: id.trim(), description: description?.trim() || "", notes: "", status: "not_completed", photo_comments: {} };
         }
         return null;
       }).filter(x => x !== null);
@@ -296,15 +293,14 @@ function Dashboard({ user }) {
           doc.setFontSize(8);
           doc.text(`Uploaded by: ${photo.uploader}`, xPos, yPos + 65);
           
-          // Add comment to PDF if exists
           const comment = photoComments[photo.name];
           if(comment) {
-            doc.setFont(undefined, 'italic');
-            doc.text(`Comment: ${comment}`, xPos, yPos + 70);
+            const splitComment = doc.splitTextToSize(comment, 80);
+            doc.text(splitComment, xPos, yPos + 70);
           }
 
-          if (index % 2 !== 0) yPos += 80; 
-          else if (index === photos.length - 1) yPos += 80;
+          if (index % 2 !== 0) yPos += 85; 
+          else if (index === photos.length - 1) yPos += 85;
         } catch (e) {
           console.error("Image failed to load for PDF", e);
         }
@@ -323,18 +319,23 @@ function Dashboard({ user }) {
       }
     }
     const hasContent = notes.trim() || photos.length || input.files.length;
-    await supabase.from("systems")
-      .update({ 
-          notes, 
-          status: hasContent ? "completed" : "not_completed",
-          photo_comments: photoComments // Ensure your DB table has this column or use JSONB
-        })
-      .eq("id",active.id);
     
-    await logActivity(active.id);
-    notify("System saved successfully!");
-    setActive(null);
-    loadSystems();
+    const { error } = await supabase.from("systems")
+      .update({ 
+        notes, 
+        status: hasContent ? "completed" : "not_completed",
+        photo_comments: photoComments 
+      })
+      .eq("id", active.id);
+
+    if (error) {
+      notify("Save failed: " + error.message, "delete");
+    } else {
+      await logActivity(active.id);
+      notify("System saved successfully!");
+      setActive(null);
+      loadSystems();
+    }
   }
 
   const handleDeletePhoto = (photo) => {
@@ -343,6 +344,15 @@ function Dashboard({ user }) {
       msg: "This image will be permanently removed.",
       onConfirm: async () => {
         await supabase.storage.from("photos").remove([`${active.id}/${photo.name}`]);
+        
+        const newComments = { ...photoComments };
+        delete newComments[photo.name];
+        
+        await supabase.from("systems")
+          .update({ photo_comments: newComments })
+          .eq("id", active.id);
+
+        setPhotoComments(newComments);
         await loadPhotos(active.id);
         notify("Photo deleted", "delete");
         setConfirmData(null);
@@ -350,17 +360,9 @@ function Dashboard({ user }) {
     });
   };
 
-  const handlePhotoCommentChange = (photoName, val) => {
-    setPhotoComments(prev => ({
-        ...prev,
-        [photoName]: val
-    }));
-  };
-
   async function createSystem(){
     if(!newId.trim()) return;
     
-    // Check if ID exists
     const { data: existing } = await supabase.from("systems").select("id").eq("id", newId.trim()).maybeSingle();
     if (existing) {
         notify("System ID already exists!", "delete");
@@ -371,7 +373,8 @@ function Dashboard({ user }) {
       id:newId.trim(),
       description:desc,
       notes:"",
-      status:"not_completed"
+      status:"not_completed",
+      photo_comments: {}
     }]);
     setShowAdd(false); setNewId(""); setDesc(""); loadSystems();
     notify("New system added!");
@@ -380,7 +383,6 @@ function Dashboard({ user }) {
   async function updateSystem() {
     if(!editTarget.id.trim()) return;
 
-    // If ID changed, move photos in storage
     if (editTarget.id !== editTarget.originalId) {
         const { data: files } = await supabase.storage.from("photos").list(editTarget.originalId);
         if (files && files.length > 0) {
@@ -465,7 +467,6 @@ function Dashboard({ user }) {
         </div>
       )}
 
-      {/* MOBILE HEADER WRAPPER (LOGO + SEARCH) */}
       <div className="mobile-header-group">
         <div className="lg:hidden flex justify-between items-center p-6 border-b-2">
           <h1 className="font-black text-2xl text-red-600 tracking-tight">STS QAQC</h1>
@@ -503,7 +504,6 @@ function Dashboard({ user }) {
           <button onClick={()=>{setFilter("not_completed"); setSidebarOpen(false);}} className="sidebarBtn"><span>🚧</span> Not Completed</button>
         </div>
 
-        {/* RECENT ACTIVITY SECTION */}
         <div className="mt-4 flex-1 overflow-y-auto">
           <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Recent Activity</h2>
           <div className="space-y-3">
@@ -585,18 +585,16 @@ function Dashboard({ user }) {
                         <img src={p.url} className="rounded-lg mb-2 cursor-pointer hover:opacity-80 transition object-cover w-full h-40 shadow-sm" alt="Preview"/>
                     </a>
                     <p className="text-[10px] text-gray-400 font-mono">{p.timestamp}</p>
-                    <p className="text-xs font-semibold truncate mb-2">{p.uploader}</p>
+                    <p className="text-xs font-semibold truncate">{p.uploader}</p>
                     
-                    {/* PHOTO COMMENT BOX */}
-                    <input 
-                        type="text" 
-                        placeholder="Add photo comment..." 
-                        value={photoComments[p.name] || ""} 
-                        onChange={(e) => handlePhotoCommentChange(p.name, e.target.value)}
-                        className="w-full text-xs p-2 border rounded-lg mb-3 outline-none focus:ring-1 focus:ring-red-400"
+                    <textarea 
+                      className="w-full mt-2 border p-2 rounded-lg text-xs outline-none focus:ring-1 focus:ring-red-500" 
+                      placeholder="Add comment to this photo..."
+                      value={photoComments[p.name] || ""}
+                      onChange={e => setPhotoComments({...photoComments, [p.name]: e.target.value})}
                     />
 
-                    <div className="flex gap-2 mt-1">
+                    <div className="flex gap-2 mt-3">
                       <button onClick={() => forceDownload(p.url, p.name)} className="flex-1 bg-red-500 text-white text-xs py-2 rounded-lg text-center font-bold hover:bg-red-600 transition">Download</button>
                       <button onClick={()=>handleDeletePhoto(p)} className="flex-1 bg-gray-200 text-gray-700 text-xs py-2 rounded-lg font-bold hover:bg-gray-300 transition">Delete</button>
                     </div>
