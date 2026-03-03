@@ -114,9 +114,12 @@ function Auth({ onAuth }) {
         <button onClick={submit} className="w-full bg-red-600 text-white p-3 rounded-xl mt-4 font-bold hover:bg-red-700 transition">
           {mode==="login"?"Login":"Create Account"}
         </button>
-        <button onClick={()=>setMode(mode==="login"?"signup":"login")} className="w-full text-sm text-red-600 mt-2 font-medium">
+        
+        {/* CREATE ACCOUNT REMOVED FROM UI BUT LOGIC KEPT */}
+        {/* <button onClick={()=>setMode(mode==="login"?"signup":"login")} className="w-full text-sm text-red-600 mt-2 font-medium">
           {mode==="login"?"Create Account":"Back to Login"}
         </button>
+        */}
       </div>
     </div>
   );
@@ -128,6 +131,7 @@ function Dashboard({ user }) {
   const [active,setActive]=useState(null);
   const [editTarget,setEditTarget]=useState(null);
   const [notes,setNotes]=useState("");
+  const [photoComments, setPhotoComments] = useState({}); // Stores comments indexed by photo name
   const [photos,setPhotos]=useState([]);
   const [search,setSearch]=useState("");
   const [filter,setFilter]=useState("all");
@@ -182,6 +186,9 @@ function Dashboard({ user }) {
   useEffect(()=>{
     if(active){
       setNotes(active.notes||"");
+      // If active.photo_comments exists in DB, you could load it here. 
+      // For now, we initialize an empty object for the current session.
+      setPhotoComments(active.photo_comments || {}); 
       loadPhotos(active.id);
     }
   },[active]);
@@ -288,6 +295,14 @@ function Dashboard({ user }) {
           doc.addImage(img, 'JPEG', xPos, yPos, 80, 60);
           doc.setFontSize(8);
           doc.text(`Uploaded by: ${photo.uploader}`, xPos, yPos + 65);
+          
+          // Add comment to PDF if exists
+          const comment = photoComments[photo.name];
+          if(comment) {
+            doc.setFont(undefined, 'italic');
+            doc.text(`Comment: ${comment}`, xPos, yPos + 70);
+          }
+
           if (index % 2 !== 0) yPos += 80; 
           else if (index === photos.length - 1) yPos += 80;
         } catch (e) {
@@ -309,7 +324,11 @@ function Dashboard({ user }) {
     }
     const hasContent = notes.trim() || photos.length || input.files.length;
     await supabase.from("systems")
-      .update({ notes, status: hasContent ? "completed" : "not_completed" })
+      .update({ 
+          notes, 
+          status: hasContent ? "completed" : "not_completed",
+          photo_comments: photoComments // Ensure your DB table has this column or use JSONB
+        })
       .eq("id",active.id);
     
     await logActivity(active.id);
@@ -329,6 +348,13 @@ function Dashboard({ user }) {
         setConfirmData(null);
       }
     });
+  };
+
+  const handlePhotoCommentChange = (photoName, val) => {
+    setPhotoComments(prev => ({
+        ...prev,
+        [photoName]: val
+    }));
   };
 
   async function createSystem(){
@@ -559,8 +585,18 @@ function Dashboard({ user }) {
                         <img src={p.url} className="rounded-lg mb-2 cursor-pointer hover:opacity-80 transition object-cover w-full h-40 shadow-sm" alt="Preview"/>
                     </a>
                     <p className="text-[10px] text-gray-400 font-mono">{p.timestamp}</p>
-                    <p className="text-xs font-semibold truncate">{p.uploader}</p>
-                    <div className="flex gap-2 mt-3">
+                    <p className="text-xs font-semibold truncate mb-2">{p.uploader}</p>
+                    
+                    {/* PHOTO COMMENT BOX */}
+                    <input 
+                        type="text" 
+                        placeholder="Add photo comment..." 
+                        value={photoComments[p.name] || ""} 
+                        onChange={(e) => handlePhotoCommentChange(p.name, e.target.value)}
+                        className="w-full text-xs p-2 border rounded-lg mb-3 outline-none focus:ring-1 focus:ring-red-400"
+                    />
+
+                    <div className="flex gap-2 mt-1">
                       <button onClick={() => forceDownload(p.url, p.name)} className="flex-1 bg-red-500 text-white text-xs py-2 rounded-lg text-center font-bold hover:bg-red-600 transition">Download</button>
                       <button onClick={()=>handleDeletePhoto(p)} className="flex-1 bg-gray-200 text-gray-700 text-xs py-2 rounded-lg font-bold hover:bg-gray-300 transition">Delete</button>
                     </div>
