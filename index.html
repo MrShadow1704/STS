@@ -114,11 +114,6 @@ function Auth({ onAuth }) {
         <button onClick={submit} className="w-full bg-red-600 text-white p-3 rounded-xl mt-4 font-bold hover:bg-red-700 transition">
           {mode==="login"?"Login":"Create Account"}
         </button>
-        {/*
-        <button onClick={()=>setMode(mode==="login"?"signup":"login")} className="w-full text-sm text-red-600 mt-2 font-medium">
-          {mode==="login"?"Create Account":"Back to Login"}
-        </button>
-        */}
       </div>
     </div>
   );
@@ -126,6 +121,9 @@ function Auth({ onAuth }) {
 
 /* DASHBOARD */
 function Dashboard({ user }) {
+  // CHANGE THESE EMAILS TO THE ONES YOU WANT TO HAVE DELETE ACCESS
+  const ALLOWED_ADMINS = ["yarolkar@stsgroup.ie", "amenon@stsgroup.ie"];
+
   const [systems,setSystems]=useState([]);
   const [active,setActive]=useState(null);
   const [editTarget,setEditTarget]=useState(null);
@@ -339,6 +337,10 @@ function Dashboard({ user }) {
   }
 
   const handleDeletePhoto = (photo) => {
+    if (!ALLOWED_ADMINS.includes(user.email)) {
+      notify("You don't have access to delete", "delete");
+      return;
+    }
     setConfirmData({
       title: "Delete Photo?",
       msg: "This image will be permanently removed.",
@@ -407,6 +409,10 @@ function Dashboard({ user }) {
   }
 
   const handleDeleteSystem = () => {
+    if (!ALLOWED_ADMINS.includes(user.email)) {
+      notify("You don't have access to delete", "delete");
+      return;
+    }
     if (editTarget.status === "completed") {
       notify("Cannot delete completed system!", "delete");
       return;
