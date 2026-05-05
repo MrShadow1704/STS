@@ -63,9 +63,6 @@ const SB_URL = "https://bbgcsddwzcrxwzczrojf.supabase.co";
 const SB_KEY = "sb_publishable_678Ol2HCLnEtOJNwly0vDg_XQS9f72f";
 const supabase = window.supabase.createClient(SB_URL, SB_KEY);
 
-/* PROXY HELPER: This reduces Cached Egress by serving images through Statically CDN */
-const proxyUrl = (url) => url ? `https://cdn.statically.io/img/${url.replace('https://', '')}` : url;
-
 /* AUTH */
 function Auth({ onAuth }) {
   const [email,setEmail]=useState("");
@@ -124,6 +121,7 @@ function Auth({ onAuth }) {
 
 /* DASHBOARD */
 function Dashboard({ user }) {
+  // CHANGE THESE EMAILS TO THE ONES YOU WANT TO HAVE DELETE ACCESS
   const ALLOWED_ADMINS = ["yarolkar@stsgroup.ie", "amenon@stsgroup.ie"];
 
   const [systems,setSystems]=useState([]);
@@ -173,12 +171,11 @@ function Dashboard({ user }) {
     if(!data){ setPhotos([]); return; }
     setPhotos(data.map(f=>{
       const parts=f.name.split("_");
-      const rawUrl = supabase.storage.from("photos").getPublicUrl(`${id}/${f.name}`).data.publicUrl;
       return {
         name:f.name,
         uploader:parts[1],
         timestamp:new Date(parseInt(parts[0])).toLocaleString(),
-        url: proxyUrl(rawUrl) // Applied Proxy here
+        url:supabase.storage.from("photos").getPublicUrl(`${id}/${f.name}`).data.publicUrl
       };
     }));
   }
@@ -287,10 +284,8 @@ function Dashboard({ user }) {
         }
         try {
           const img = new Image();
-          // Use proxied URL for PDF generation to save egress
-          img.src = proxyUrl(photo.url); 
-          img.crossOrigin = "Anonymous"; // Crucial for PDF generation from external CDN
-          await new Promise((resolve) => { img.onload = resolve; img.onerror = resolve; });
+          img.src = photo.url;
+          await new Promise((resolve) => { img.onload = resolve; });
           const xPos = (index % 2 === 0) ? 20 : 110;
           doc.addImage(img, 'JPEG', xPos, yPos, 80, 60);
           doc.setFontSize(8);
